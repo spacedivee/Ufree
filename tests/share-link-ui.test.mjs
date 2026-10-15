@@ -9,11 +9,11 @@ const data = { people: { Alice: person("Calculus"), Bob: person("Physics") } };
 const plain = value => JSON.parse(JSON.stringify(value));
 const tick = () => new Promise(resolve => setTimeout(resolve, 20));
 
-async function app(initial = null, url = base) {
+async function app(initial = null, url = base, mobile = false) {
   const window = new Window({ url, settings: { disableJavaScriptFileLoading: true, disableCSSFileLoading: true } });
   window.document.write(fs.readFileSync(new URL("../index.html", import.meta.url), "utf8"));
   window.setInterval = () => 0;
-  window.matchMedia = query => ({ matches: query.includes("prefers-reduced-motion"), addEventListener() {} });
+  window.matchMedia = query => ({ matches: query.includes("prefers-reduced-motion") || (mobile && query === "(max-width: 900px)"), addEventListener() {} });
   window.confirm = () => true;
   Object.assign(window, { TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream });
   let copied;
@@ -109,10 +109,9 @@ for (const url of [
     await checkLink(a.el("personQuickSharePanel"), ["Alice"]);
     a.el("closePersonQuickShare").click();
 
-    a.el("fullScheduleButton").click(); a.el("exportPersonScheduleButton").click();
-    await a.wait(() => !a.el("exportPersonScheduleButton").disabled);
-    a.el("personSharePanel").querySelector(".toggle-share-qr").click();
-    await checkLink(a.el("personSharePanel"), ["Alice"]);
+    a.el("fullScheduleButton").click();
+    assert.equal(a.el("personWeekModal").hidden, false);
+    assert.equal(a.el("exportPersonScheduleButton"), null);
     assert.equal(a.stored(), before, "sharing preserves saved schedules");
   } finally { a.window.happyDOM.abort(); }
 });
@@ -191,11 +190,11 @@ test("oversized QR retains the complete link and code, and one-person export con
     assert.equal(output.value.length > 2331, true); assert.equal(a.el("exportCodeOutput").value, code);
     a.window.WhosFreeShareCode.createLink = createLink;
     a.el("closeScheduleModal").click(); a.el("viewToggleButton").click();
-    a.el("peopleList").querySelector('[data-person="Alice"]').click(); a.el("fullScheduleButton").click();
-    a.el("exportPersonScheduleButton").click(); await a.wait(() => !a.el("exportPersonScheduleButton").disabled);
-    const personal = a.el("personSharePanel"); assert.equal(personal.hidden, false);
+    a.el("peopleList").querySelector('[data-person="Alice"]').click(); a.el("sharePersonScheduleButton").click();
+    a.el("personQuickQrButton").click(); await a.wait(() => !a.el("personQuickQrButton").disabled);
+    const personal = a.el("personQuickSharePanel"); assert.equal(personal.hidden, false);
     assert.deepEqual(Object.keys((await a.window.WhosFreeShareCode.decode(personal.querySelector("textarea").value)).people), ["Alice"]);
-    personal.querySelector(".toggle-share-qr").click(); assert.ok(personal.querySelector("svg"));
+    assert.ok(personal.querySelector("svg"));
   } finally { a.window.happyDOM.abort(); }
 });
 
@@ -246,19 +245,19 @@ test("single-person three-dot choices preserve full teacher names and course det
   const rich = { people: { ...data.people, Alice: { ...person("Physics"), classes: [{ ...person("Physics").classes[0], course_code: "203-SN1-RE", section: "00002" }] } } };
   const a = await app(rich);
   try {
-    a.el("viewToggleButton").click(); a.el("peopleList").querySelector('[data-person="Alice"]').click(); a.el("fullScheduleButton").click();
-    const options = a.el("personExportFieldOptions"); assert.equal(options.querySelectorAll("input:checked").length, 0);
-    options.querySelector(".export-include-all").click(); a.el("exportPersonScheduleButton").click();
-    await a.wait(() => !a.el("exportPersonScheduleButton").disabled);
-    const imported = await a.window.WhosFreeShareCode.decode(a.el("personSharePanel").querySelector("textarea").value);
+    a.el("viewToggleButton").click(); a.el("peopleList").querySelector('[data-person="Alice"]').click(); a.el("sharePersonScheduleButton").click();
+    const options = a.el("personQuickExportFields"); assert.equal(options.querySelectorAll("input:checked").length, 0);
+    options.querySelector(".export-include-all").click(); a.el("personQuickUrlButton").click();
+    await a.wait(() => !a.el("personQuickUrlButton").disabled);
+    const imported = await a.window.WhosFreeShareCode.decode(a.el("personQuickSharePanel").querySelector("textarea").value);
     assert.deepEqual(Object.keys(imported.people), ["Alice"]);
     assert.equal(imported.people.Alice.classes[0].instructor, "Anna de la Cruz");
     assert.equal(imported.people.Alice.classes[0].course_code, "203-SN1-RE"); assert.equal(imported.people.Alice.classes[0].section, "00002");
     options.querySelector('[data-export-field="instructor"]').click();
-    assert.equal(a.el("personWeekCode").value, ""); assert.equal(a.el("personSharePanel").hidden, true);
+    assert.equal(a.el("personQuickCode").value, ""); assert.equal(a.el("personQuickSharePanel").hidden, true);
     options.open = true;
     a.window.document.dispatchEvent(new a.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    assert.equal(options.open, false); assert.equal(a.el("personWeekModal").hidden, false);
+    assert.equal(options.open, false); assert.equal(a.el("personQuickShareModal").hidden, false);
   } finally { a.window.happyDOM.abort(); }
 });
 
@@ -285,7 +284,8 @@ test("home export defaults to Everyone in a collapsed selection and supports eac
     assert.ok(a.el("exportQr").querySelector("svg")); assert.equal(a.el("exportQr").hidden, false);
     assert.equal(a.el("exportQrButton").textContent, "Export QR");
     a.el("generateCodeButton").click(); await a.wait(() => !a.el("generateCodeButton").disabled);
-    assert.equal(a.el("exportCodeField").hidden, false); assert.equal(a.el("copyCodeButton").hidden, false);
+    assert.equal(a.el("exportCodeField").hidden, false); assert.equal(a.el("copyCodeButton"), null);
+    assert.equal(a.copied(), a.el("exportCodeOutput").value);
     assert.deepEqual(Object.keys((await a.window.WhosFreeShareCode.decode(a.el("exportCodeOutput").value)).people), ["Alice","Bob"]);
     a.el("exportSelection").open = true;
     a.el("exportPeopleList").querySelector('[data-person="Bob"]').click();
@@ -299,11 +299,11 @@ test("home export defaults to Everyone in a collapsed selection and supports eac
   } finally { a.window.happyDOM.abort(); }
 });
 
-test("navigation keeps five actions together, the export icon opens quick share, and Help works", async () => {
+test("navigation keeps six actions together, the export icon opens quick share, and Help works", async () => {
   const a = await app(data);
   try {
     const nav = a.window.document.querySelector('nav[aria-label="Main navigation"]');
-    assert.deepEqual([...nav.children].map(button => button.id), ["scheduleDataButton","helpButton","settingsButton","homeExportButton","undoChangesButton"]);
+    assert.deepEqual([...nav.children].map(button => button.id), ["scheduleDataButton","helpButton","settingsButton","homeExportButton","homeImportButton","undoChangesButton"]);
     assert.equal(a.el("settingsButton").querySelector(".nav-extra-label").textContent, "Settings"); assert.equal(a.el("settingsButton").getAttribute("aria-label"), "Settings");
     assert.equal(a.el("homeExportButton").querySelector(".nav-extra-label").textContent, "Export"); assert.ok(a.el("homeExportButton").querySelector("svg"));
     a.el("homeExportButton").click(); assert.equal(a.el("exportSelection").open, false); assert.equal(a.el("selectAllSchedules").checked, true);
@@ -317,6 +317,46 @@ test("navigation keeps five actions together, the export icon opens quick share,
     assert.equal(a.el("showGroupsToggle").querySelector(".group-toggle-label").textContent, "GROUP");
     a.el("showGroupsToggle").click(); assert.equal(a.el("showGroupsToggle").querySelector(".group-toggle-label").textContent, "GROUP");
     assert.equal(a.el("manageGroupsButton").hidden, false);
+  } finally { a.window.happyDOM.abort(); }
+});
+
+for (const mobile of [false, true]) test(`menu code import shares the existing importer and restores focus on ${mobile ? "mobile" : "desktop"}`, async () => {
+  const a = await app(null, base, mobile);
+  try {
+    const trigger = mobile ? "mobileMenuButton" : "homeImportButton";
+    const open = () => {
+      if (mobile) {
+        a.el("mobileMenuButton").click();
+        assert.equal(a.el("mobileMenuButton").getAttribute("aria-expanded"), "true");
+      }
+      a.el("homeImportButton").click();
+      assert.equal(a.el("mobileMenuButton").getAttribute("aria-expanded"), "false");
+      assert.equal(a.el("scheduleModal").hidden, false);
+      assert.equal(a.el("codeImportPanel").hidden, false);
+      assert.equal(a.el("scheduleModal").querySelector(".schedule-modal").dataset.scheduleFlow, "code-import");
+    };
+    assert.equal(a.el("homeImportButton").disabled, false, "import works on an empty device");
+    assert.equal(a.el("homeImportButton").getAttribute("aria-label"), "Import schedule code");
+    assert.ok(a.el("homeImportButton").querySelector("svg"));
+    open();
+    a.el("closeImportButton").click();
+    assert.equal(a.el("scheduleModal").hidden, true);
+    assert.equal(a.window.document.activeElement.id, trigger);
+    assert.equal(a.stored(), null);
+    open();
+    a.el("importCodeInput").value = await a.window.WhosFreeShareCode.encode({ people: { Alice: data.people.Alice } }, { fields: [] });
+    a.el("decodeCodeButton").click();
+    await a.wait(() => !a.el("decodeCodeButton").disabled);
+    assert.deepEqual(Object.keys(JSON.parse(a.stored()).data.people), ["Alice"]);
+    a.el("closeImportButton").click();
+    assert.equal(a.el("scheduleModal").hidden, true);
+    assert.equal(a.window.document.activeElement.id, trigger);
+    assert.equal(a.window.document.body.style.overflow, "");
+    assert.equal(a.el("homeImportButton").disabled, false);
+    a.el("scheduleDataButton").click(); a.el("importCodeButton").click();
+    assert.equal(a.el("codeImportPanel").hidden, false, "the Schedules import button still works");
+    a.el("closeImportButton").click();
+    assert.equal(a.el("scheduleModal").hidden, false, "the existing importer returns to Schedules");
   } finally { a.window.happyDOM.abort(); }
 });
 

@@ -13,8 +13,6 @@
     selectedDay: "Monday",
     selectedTime: "12:00",
     selectedPerson: null,
-    weekPerson: null,
-    personWeekRequest: 0,
     personShareName: null,
     personShareRequest: 0,
     personShareBusy: false,
@@ -87,6 +85,7 @@
     helpModal: document.getElementById("helpModal"),
     closeHelpModal: document.getElementById("closeHelpModal"),
     homeExportButton: document.getElementById("homeExportButton"),
+    homeImportButton: document.getElementById("homeImportButton"),
     undoChangesButton: document.getElementById("undoChangesButton"),
     undoScheduleChangesButton: document.getElementById("undoScheduleChangesButton"),
     undoChangesStatus: document.getElementById("undoChangesStatus"),
@@ -140,7 +139,6 @@
     exportSelection: document.getElementById("exportSelection"),
     exportSelectionSummary: document.getElementById("exportSelectionSummary"),
     exportCodeOutput: document.getElementById("exportCodeOutput"),
-    copyCodeButton: document.getElementById("copyCodeButton"),
     exportCodeStatus: document.getElementById("exportCodeStatus"),
     codeImportPanel: document.getElementById("codeImportPanel"),
     importCodeInput: document.getElementById("importCodeInput"),
@@ -151,9 +149,7 @@
     sharedImportPreview: document.getElementById("sharedImportPreview"),
     sharedImportPeople: document.getElementById("sharedImportPeople"),
     exportSharePanel: document.getElementById("exportSharePanel"),
-    personSharePanel: document.getElementById("personSharePanel"),
     exportFieldOptions: document.getElementById("exportFieldOptions"),
-    personExportFieldOptions: document.getElementById("personExportFieldOptions"),
     codeConflictPrompt: document.getElementById("codeConflictPrompt"),
     codeConflictMessage: document.getElementById("codeConflictMessage"),
     closeImportButton: document.getElementById("closeImportButton"),
@@ -208,11 +204,6 @@
     personWeekGrid: document.getElementById("personWeekGrid"),
     personWeekEmpty: document.getElementById("personWeekEmpty"),
     closePersonWeekModal: document.getElementById("closePersonWeekModal"),
-    exportPersonScheduleButton: document.getElementById("exportPersonScheduleButton"),
-    personWeekExport: document.getElementById("personWeekExport"),
-    personWeekCode: document.getElementById("personWeekCode"),
-    personWeekExportStatus: document.getElementById("personWeekExportStatus"),
-    copyPersonWeekCodeButton: document.getElementById("copyPersonWeekCodeButton"),
     personQuickShareModal: document.getElementById("personQuickShareModal"),
     personQuickShareTitle: document.getElementById("personQuickShareTitle"),
     closePersonQuickShare: document.getElementById("closePersonQuickShare"),
@@ -222,7 +213,6 @@
     personQuickExportFields: document.getElementById("personQuickExportFields"),
     personQuickCodeField: document.getElementById("personQuickCodeField"),
     personQuickCode: document.getElementById("personQuickCode"),
-    copyPersonQuickCode: document.getElementById("copyPersonQuickCode"),
     personQuickSharePanel: document.getElementById("personQuickSharePanel"),
     personQuickShareStatus: document.getElementById("personQuickShareStatus"),
     personGroupModal: document.getElementById("personGroupModal"),
@@ -2839,9 +2829,7 @@
     els.exportSelectionSummary.textContent = selected === inputs.length && selected > 0 ? `Everyone · ${selected}` : `${selected} of ${inputs.length} selected`;
     els.exportCodeOutput.value = "";
     els.exportCodeField.hidden = true;
-    els.copyCodeButton.hidden = true;
     resetShareLink(els.exportSharePanel);
-    els.copyCodeButton.disabled = true;
     codeStatus(els.exportCodeStatus, `${selected} schedule${selected === 1 ? "" : "s"} selected.`);
   }
 
@@ -2865,12 +2853,12 @@
     }
   }
 
-  function openQuickExport(event) {
-    if (state.isParsing || state.pendingImage || state.codeMode || !Object.keys(peopleMap()).length) return;
+  function openQuickCodePanel(mode, event) {
+    if (state.isParsing || state.pendingImage || state.codeMode || (mode === "export" && !Object.keys(peopleMap()).length)) return;
     if (!els.helpModal.hidden) closeHelp();
-    state.quickExportReturnFocus = usesMobileNavigation() ? mobileMenuButton : event?.currentTarget || els.homeExportButton;
+    state.quickExportReturnFocus = usesMobileNavigation() ? mobileMenuButton : event?.currentTarget || (mode === "import" ? els.homeImportButton : els.homeExportButton);
     openScheduleModal();
-    openCodePanel("export", true);
+    openCodePanel(mode, true);
   }
 
   function openHelp() {
@@ -2933,15 +2921,6 @@
     return window.WhosFreeShareCode.encode({ people: Object.fromEntries(names.map(name => [name, peopleMap()[name]])) }, { fields });
   }
 
-  function personExportFieldsChanged() {
-    state.personWeekRequest++;
-    els.personWeekCode.value = "";
-    els.personWeekExport.hidden = true;
-    els.copyPersonWeekCodeButton.disabled = true;
-    resetShareLink(els.personSharePanel);
-    codeStatus(els.personWeekExportStatus, "Export again to apply these details.");
-  }
-
   function shareCodeReadyMessage(count, code) {
     const messageSize = code.length <= 1000 ? "Fits a 1,000-character message." : "Over 1,000 characters. Select fewer schedules for one Instagram message.";
     return `Code ready for ${count} schedule${count === 1 ? "" : "s"} · ${code.length.toLocaleString()} characters. ${messageSize}`;
@@ -2961,7 +2940,6 @@
       els.exportCodeOutput.value = code;
       populateShareLink(code, els.exportSharePanel);
       els.exportCodeField.hidden = action !== "code";
-      els.copyCodeButton.hidden = action !== "code";
       codeStatus(els.exportCodeStatus, shareCodeReadyMessage(names.length, code), "success");
       if (action === "qr") {
         if (!els.exportSharePanel.querySelector("textarea").value) throw new Error("This code cannot make a QR. Use Export Code instead.");
@@ -2973,16 +2951,12 @@
       } else {
         els.exportSharePanel.hidden = true;
         revealSection(els.exportCodeField);
+        await copyExportCode(els.exportCodeOutput, els.exportCodeStatus);
       }
     } catch (error) {
       els.exportCodeOutput.value = "";
       codeStatus(els.exportCodeStatus, error.message || "The code could not be created.", "error");
     } finally { state.isParsing = false; updateScheduleModal(); }
-  }
-
-  async function copyShareCode() {
-    if (!els.exportCodeOutput.value || state.isParsing) return;
-    await copyExportCode(els.exportCodeOutput, els.exportCodeStatus);
   }
 
   function resetShareLink(panel) {
@@ -3125,15 +3099,18 @@
     await previewSharedImport(input);
   }
 
-  async function copyExportCode(output, status) {
+  async function copyExportCode(output, status, isCurrent = () => true) {
     if (!output.value) return;
+    const details = status.textContent;
     try {
       await navigator.clipboard.writeText(output.value);
-      codeStatus(status, "Code copied. Paste it into your message.", "success");
+      if (!isCurrent()) return;
+      codeStatus(status, `Code copied. Paste it into your message. ${details}`, "success");
     } catch {
+      if (!isCurrent()) return;
       output.focus();
       output.select();
-      codeStatus(status, "Select and copy the code above, then paste it into your message.");
+      codeStatus(status, `Select and copy the code above, then paste it into your message. ${details}`);
     }
   }
 
@@ -3440,11 +3417,11 @@
     const importBusy = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
     els.exportSchedulesButton.disabled = importBusy || peopleCount === 0;
     els.homeExportButton.disabled = importBusy || peopleCount === 0;
+    if (els.homeImportButton) els.homeImportButton.disabled = importBusy;
     els.importCodeButton.disabled = importBusy;
     els.generateCodeButton.disabled = state.isParsing;
     els.exportQrButton.disabled = state.isParsing;
     els.copyExportLinkButton.disabled = state.isParsing;
-    els.copyCodeButton.disabled = state.isParsing || !els.exportCodeOutput.value;
     els.decodeCodeButton.disabled = state.isParsing || Boolean(state.sharedImport && !els.sharedImportPeople.querySelector("input:checked"));
     els.closeImportButton.disabled = state.isParsing;
     els.importCodeInput.disabled = state.isParsing;
@@ -3573,7 +3550,6 @@
   function resetPersonQuickOutputs() {
     els.personQuickCode.value = "";
     els.personQuickCodeField.hidden = true;
-    els.copyPersonQuickCode.disabled = true;
     resetShareLink(els.personQuickSharePanel);
     codeStatus(els.personQuickShareStatus, "");
   }
@@ -3630,11 +3606,12 @@
       if (request !== state.personShareRequest) return;
       els.personQuickCode.value = code;
       populateShareLink(code, els.personQuickSharePanel);
+      codeStatus(els.personQuickShareStatus, shareCodeReadyMessage(1, code), "success");
       if (action === "code") {
         els.personQuickSharePanel.hidden = true;
         els.personQuickCodeField.hidden = false;
-        els.copyPersonQuickCode.disabled = false;
         revealSection(els.personQuickCodeField);
+        await copyExportCode(els.personQuickCode, els.personQuickShareStatus, () => request === state.personShareRequest);
       } else {
         if (!els.personQuickSharePanel.querySelector("textarea").value) throw new Error("Use Text Code for this schedule instead.");
         if (action === "qr") toggleScheduleQr(els.personQuickSharePanel);
@@ -3644,7 +3621,6 @@
           if (request !== state.personShareRequest) return;
         }
       }
-      codeStatus(els.personQuickShareStatus, shareCodeReadyMessage(1, code), "success");
     } catch (error) {
       if (request === state.personShareRequest) {
         resetPersonQuickOutputs();
@@ -3898,17 +3874,8 @@
   function openPersonWeek(name) {
     const person = peopleMap()[name];
     if (!person) return;
-    state.weekPerson = name;
-    state.personWeekRequest++;
     els.personWeekTitle.textContent = displayName(name);
     els.personWeekSemester.textContent = scheduleLabel(person, true);
-    els.personWeekExport.hidden = true;
-    resetExportFields(els.personExportFieldOptions);
-    resetShareLink(els.personSharePanel);
-    els.personWeekCode.value = "";
-    els.copyPersonWeekCodeButton.disabled = true;
-    els.exportPersonScheduleButton.disabled = false;
-    codeStatus(els.personWeekExportStatus, "");
     const classes = ALL_DAYS.flatMap(day => classesForDay(name, day)).filter(item => toMinutes(item.end) > toMinutes(item.start));
     const first = Math.min(480, ...classes.map(item => Math.floor(toMinutes(item.start) / 60) * 60));
     const last = Math.max(1200, ...classes.map(item => Math.ceil(toMinutes(item.end) / 60) * 60));
@@ -3957,42 +3924,9 @@
   }
 
   function closePersonWeek() {
-    state.personWeekRequest++;
-    state.weekPerson = null;
     els.personWeekModal.hidden = true;
     if (![els.scheduleModal, els.settingsModal, els.groupsModal, els.groupWeekModal].some(modal => !modal.hidden)) document.body.style.overflow = "";
     document.getElementById("fullScheduleButton")?.focus({ preventScroll: true });
-  }
-
-  async function exportPersonSchedule() {
-    const name = state.weekPerson;
-    if (!name || !peopleMap()[name] || els.exportPersonScheduleButton.disabled) return;
-    const request = ++state.personWeekRequest;
-    els.exportPersonScheduleButton.disabled = true;
-    els.personExportFieldOptions.open = false;
-    els.personExportFieldOptions.querySelectorAll("input, button").forEach(input => { input.disabled = true; });
-    els.copyPersonWeekCodeButton.disabled = true;
-    els.personWeekExport.hidden = true;
-    els.personWeekCode.value = "";
-    codeStatus(els.personWeekExportStatus, "Creating the code on this device…");
-    resetShareLink(els.personSharePanel);
-    try {
-      const code = await encodeSchedules([name], els.personExportFieldOptions);
-      if (request !== state.personWeekRequest) return;
-      els.personWeekCode.value = code;
-      populateShareLink(code, els.personSharePanel);
-      els.personWeekExport.hidden = false;
-      els.copyPersonWeekCodeButton.disabled = false;
-      codeStatus(els.personWeekExportStatus, shareCodeReadyMessage(1, code), "success");
-      revealSection(els.personWeekExport, els.personWeekCode);
-    } catch (error) {
-      if (request === state.personWeekRequest) codeStatus(els.personWeekExportStatus, error.message || "The code could not be created.", "error");
-    } finally {
-      if (request === state.personWeekRequest) {
-        els.exportPersonScheduleButton.disabled = false;
-        els.personExportFieldOptions.querySelectorAll("input, button").forEach(input => { input.disabled = false; });
-      }
-    }
   }
 
   function renderDetail(name, day, minute) {
@@ -4363,7 +4297,8 @@
       applyAccentTheme(button.dataset.colorTheme, true);
     });
     els.scheduleDataButton.addEventListener("click", openScheduleModal);
-    els.homeExportButton.addEventListener("click", openQuickExport);
+    els.homeExportButton.addEventListener("click", event => openQuickCodePanel("export", event));
+    els.homeImportButton?.addEventListener("click", event => openQuickCodePanel("import", event));
     els.helpButton.addEventListener("click", openHelp);
     els.closeHelpModal.addEventListener("click", closeHelp);
     els.helpModal.addEventListener("click", event => { if (event.target === els.helpModal) closeHelp(); });
@@ -4405,13 +4340,10 @@
     els.personQuickUrlButton.addEventListener("click", () => exportPersonQuickSchedule("url"));
     els.personQuickQrButton.addEventListener("click", () => exportPersonQuickSchedule("qr"));
     els.personQuickCodeButton.addEventListener("click", () => exportPersonQuickSchedule("code"));
-    els.copyPersonQuickCode.addEventListener("click", () => copyExportCode(els.personQuickCode, els.personQuickShareStatus));
     els.closePersonGroup.addEventListener("click", closePersonGroup);
     els.personGroupModal.addEventListener("click", event => { if (event.target === els.personGroupModal) closePersonGroup(); });
     els.personGroupForm.addEventListener("submit", addPersonToGroup);
     els.personGroupManage.addEventListener("click", () => { closePersonGroup(); openGroupsModal(); });
-    els.exportPersonScheduleButton.addEventListener("click", exportPersonSchedule);
-    els.copyPersonWeekCodeButton.addEventListener("click", () => copyExportCode(els.personWeekCode, els.personWeekExportStatus));
     els.groupsModal.addEventListener("click", event => { if (event.target === els.groupsModal) closeGroupsModal(); });
     els.groupWeekModal.addEventListener("click", event => { if (event.target === els.groupWeekModal) closeGroupWeek(); });
     els.closeScheduleModal.addEventListener("click", closeScheduleModal);
@@ -4454,18 +4386,13 @@
     els.generateCodeButton.addEventListener("click", () => generateShareCode("code"));
     els.exportQrButton.addEventListener("click", () => generateShareCode("qr"));
     els.copyExportLinkButton.addEventListener("click", () => generateShareCode("link"));
-    for (const options of [els.exportFieldOptions, els.personExportFieldOptions, els.personQuickExportFields]) {
-      const changed = options === els.exportFieldOptions ? exportSelectionChanged : options === els.personExportFieldOptions ? personExportFieldsChanged : personQuickFieldsChanged;
+    for (const options of [els.exportFieldOptions, els.personQuickExportFields]) {
+      const changed = options === els.exportFieldOptions ? exportSelectionChanged : personQuickFieldsChanged;
       options.addEventListener("change", changed);
       options.querySelector(".export-include-all").addEventListener("click", () => {
         options.querySelectorAll("input").forEach(input => { input.checked = true; });
         changed();
       });
-    }
-    els.copyCodeButton.addEventListener("click", copyShareCode);
-    for (const panel of [els.personSharePanel]) {
-      panel.querySelector(".copy-share-link").addEventListener("click", () => copyScheduleLink(panel));
-      panel.querySelector(".toggle-share-qr").addEventListener("click", () => toggleScheduleQr(panel));
     }
     els.decodeCodeButton.addEventListener("click", importShareCode);
     els.codeConflictPrompt.addEventListener("click", event => {
@@ -4521,7 +4448,7 @@
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
       if (event.key !== "Escape") return;
-      const exportMenu = [els.exportFieldOptions, els.personExportFieldOptions, els.personQuickExportFields].find(menu => menu.open && !menu.closest("[hidden]"));
+      const exportMenu = [els.exportFieldOptions, els.personQuickExportFields].find(menu => menu.open && !menu.closest("[hidden]"));
       if (exportMenu) { event.preventDefault(); exportMenu.open = false; exportMenu.querySelector("summary").focus(); return; }
       if (state.codeConflict) { event.preventDefault(); finishCodeConflict("old"); return; }
       if (state.pendingPersonHold) {
@@ -4584,7 +4511,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=91", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=96", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
