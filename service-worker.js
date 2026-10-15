@@ -1,26 +1,26 @@
-const CACHE_NAME = "whos-free-shell-v87";
+const CACHE_NAME = "whos-free-shell-v91";
 const OCR_CACHE_NAME = "whos-free-ocr-v1";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=87",
-  "./app.js?v=87",
-  "./schedule-share-code.js?v=87",
-  "./assets/qr/qrcodegen.js?v=87",
-  "./schedule-availability.js?v=87",
-  "./schedule-groups.js?v=87",
-  "./schedule-parser.js?v=87",
-  "./schedule-image-parser.js?v=87",
-  "./manifest.webmanifest?v=87",
-  "./assets/favicon.png?v=87",
-  "./assets/apple-touch-icon.png?v=87",
-  "./assets/icon-192.png?v=87",
-  "./assets/icon-512.png?v=87",
-  "./assets/icon-maskable-512.png?v=87",
-  "./assets/UFreeLogo_SVG.svg?v=87",
-  "./assets/UFreeLogo_PNG.png?v=87",
-  "./assets/favicon.svg?v=87",
-  "./favicon.ico?v=87"
+  "./styles.css?v=90",
+  "./app.js?v=91",
+  "./schedule-share-code.js?v=90",
+  "./assets/qr/qrcodegen.js?v=90",
+  "./schedule-availability.js?v=90",
+  "./schedule-groups.js?v=90",
+  "./schedule-parser.js?v=90",
+  "./schedule-image-parser.js?v=90",
+  "./manifest.webmanifest?v=90",
+  "./assets/favicon.png?v=90",
+  "./assets/apple-touch-icon.png?v=90",
+  "./assets/icon-192.png?v=90",
+  "./assets/icon-512.png?v=90",
+  "./assets/icon-maskable-512.png?v=90",
+  "./assets/UFreeLogo_SVG.svg?v=90",
+  "./assets/UFreeLogo_PNG.png?v=90",
+  "./assets/favicon.svg?v=90",
+  "./favicon.ico?v=90"
 ];
 
 self.addEventListener("install", event => {
@@ -92,6 +92,7 @@ self.addEventListener("notificationclick", event => {
     })
   );
 });
+
 
 
 
