@@ -1,5 +1,34 @@
 # UFree
 
+### Dated weekly screenshot fallback
+
+- Keep every existing reader and decoding function unchanged. Only after the complete existing image reader fails, try the separate `schedule-dated-image-parser.js` reader. Successful existing reads return immediately and never invoke it.
+- Support the attached style: five dated weekday headings, white classes with dark outlines, grey empty cells, and paired start/end clocks in each row. Validate column borders, all clock-row borders and every printed time before importing classes. Full-width class borders separate touching classes; small Classroom tags do not.
+- Ignore calendar dates such as Oct 19. Output the same weekly weekday/start/end class records as other imports, with no event dates or calendar-week restriction. Read `s.00001` sections and bare room labels on this new path only.
+- Keep the existing naming, review, editing, duplicate handling and save flow. Flag ambiguous room characters rather than guessing. All OCR uses the already bundled on-device engine and language files.
+- The source canvas is retained until the primary reader or final fallback finishes, so a failed primary crop cannot destroy the fallback input. It is released afterward when requested. The fallback has bounded OCR calls and terminates its worker on success or failure.
+- Validation on the supplied image recovered all 15 class blocks with the visually checked weekly times. Text remains subject to OCR review. Deploy the new fallback script with the updated primary script, HTML and service worker; both readers are cached offline.
+
+### Share Group
+
+- Each named group's three-dot menu offers **Share Group** after Send group to top and Weekly availability. It exports every saved member of that group, including members outside the current search/free filter, through Code, QR or Link. Optional detail choices work as before.
+- Group shares use WF7/WFL7. The receiving Import popup identifies the group and lets the recipient edit its name and **Add to group**, **Add everybody individually**, or Cancel. Nothing is saved until a choice is made. Ordinary shares still import automatically when opened.
+- Opened group links keep differing local schedules and skip duplicates, while including their canonical local names in the group. Manual group-code imports retain the existing conflict choices and correctly include renamed Keep both people. Group names never overwrite an unrelated local group; collisions suggest a new name.
+- Independent QR batches carry the same source group identity. Later scans can extend the recipient's chosen group, even after a reload. Repeated scans do not duplicate people or groups. Group additions and membership extensions support session Undo; storage failures are reported honestly.
+- Existing WF1–WF6 codes remain supported. Ordinary exports remain WF5/WF6. New group codes require the updated app on the receiving device; upload the updated files to separately hosted deployments too.
+
+### Combined Import panel
+
+- The main menu's **Import** opens a single panel with **Import schedule image** above the code/link text box. Schedules keeps its original picture button and also uses this combined importer.
+- Both image buttons open the same chooser and use the existing local recognition, naming, review, duplicate handling and save flow. Canceling the chooser or returning from review preserves any typed code. Image errors and retry feedback stay visible in Import.
+
+### Multiple independent QR codes
+
+- When a collection is too large for one QR, **Multiple QR codes** packs the selected people into scrollable QR cards. Each card lists its people and uses a complete share link on the current deployment's domain and path (WF6 for ordinary collections, WF7 for groups).
+- Opening a QR/share link adds its people automatically and shows the added/skipped counts. Identical people and different schedules with an existing name are skipped, preserving local data; additions support Undo. Pasted links in the manual importer keep their selection preview and conflict choices. Every QR works independently, in any order. Export field choices are preserved, and schedules are never split into pieces that require reassembly.
+- Packing measures real compressed link byte sizes, starts with large schedules, and tries redistribution and merges to reduce the QR count. The search is bounded for responsiveness; it does not guarantee the mathematically smallest number for every selection.
+- Individually oversized schedules are named explicitly with guidance to use a code/link or fewer optional details. Changing people/details, switching export actions, or closing the dialog discards old results and cancels pending work.
+
 ### Reader 53 — Variable-height semester rows
 
 - Keep the existing image reader first. When it rejects a time axis, an additional fallback can read semester timetables with stretched half-hour rows.

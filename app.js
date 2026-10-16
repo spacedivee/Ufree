@@ -30,6 +30,10 @@
     codeMode: null,
     quickExport: false,
     quickExportReturnFocus: null,
+    exportGroup: null,
+    groupImportAutomatic: false,
+    qrBatchRequest: 0,
+    qrBatchBusy: false,
     sharedImport: null,
     deviceReady: false,
     sharedLinkStartup: false,
@@ -129,6 +133,15 @@
     shareSchedulesButton: document.getElementById("shareSchedulesButton"),
     exportSchedulesButton: document.getElementById("exportSchedulesButton"),
     importCodeButton: document.getElementById("importCodeButton"),
+    importScheduleImageButton: document.getElementById("importScheduleImageButton"),
+    importImageStatus: document.getElementById("importImageStatus"),
+    exportGroupSummary: document.getElementById("exportGroupSummary"),
+    sharedGroupImport: document.getElementById("sharedGroupImport"),
+    sharedGroupSummary: document.getElementById("sharedGroupSummary"),
+    sharedGroupName: document.getElementById("sharedGroupName"),
+    sharedGroupError: document.getElementById("sharedGroupError"),
+    addSharedGroupButton: document.getElementById("addSharedGroupButton"),
+    addSharedPeopleButton: document.getElementById("addSharedPeopleButton"),
     codeExportPanel: document.getElementById("codeExportPanel"),
     exportPeopleList: document.getElementById("exportPeopleList"),
     selectAllSchedules: document.getElementById("selectAllSchedules"),
@@ -138,6 +151,12 @@
     exportCodeField: document.getElementById("exportCodeField"),
     exportSelection: document.getElementById("exportSelection"),
     exportSelectionSummary: document.getElementById("exportSelectionSummary"),
+    exportSelectionControls: document.getElementById("exportSelectionControls"),
+    exportPeopleSearch: document.getElementById("exportPeopleSearch"),
+    exportPeopleEmpty: document.getElementById("exportPeopleEmpty"),
+    exportSelectionToggleLabel: document.getElementById("exportSelectionToggleLabel"),
+    exportGroupButton: document.getElementById("exportGroupButton"),
+    exportGroupPicker: document.getElementById("exportGroupPicker"),
     exportCodeOutput: document.getElementById("exportCodeOutput"),
     exportCodeStatus: document.getElementById("exportCodeStatus"),
     codeImportPanel: document.getElementById("codeImportPanel"),
@@ -149,6 +168,9 @@
     sharedImportPreview: document.getElementById("sharedImportPreview"),
     sharedImportPeople: document.getElementById("sharedImportPeople"),
     exportSharePanel: document.getElementById("exportSharePanel"),
+    multipleQrButton: document.getElementById("multipleQrButton"),
+    multipleQrCodes: document.getElementById("multipleQrCodes"),
+    multipleQrProgress: document.getElementById("multipleQrProgress"),
     exportFieldOptions: document.getElementById("exportFieldOptions"),
     codeConflictPrompt: document.getElementById("codeConflictPrompt"),
     codeConflictMessage: document.getElementById("codeConflictMessage"),
@@ -389,7 +411,7 @@
     if (!canAnimate()) return;
     const targets = [
       document.querySelector(".brand-copy"),
-      usesMobileNavigation() ? null : document.querySelector(".header-actions"),
+      usesDrawerNavigation() ? null : document.querySelector(".header-actions"),
       document.querySelector(".control-bar"),
       document.querySelector(".people-panel"),
       document.querySelector(".detail-panel"),
@@ -882,6 +904,8 @@
       pinnedPeople: [...state.pinnedPeople],
       mutedPeople: [...state.mutedPeople],
       groups: state.groups,
+      showGroups: state.showGroups,
+      hideUngrouped: state.hideUngrouped,
       personOrders: state.personOrders,
     }));
   }
@@ -946,6 +970,14 @@
       if (Object.prototype.hasOwnProperty.call(before.nicknames, name)) {
         Object.defineProperty(state.nicknames, name, { value: before.nicknames[name], enumerable: true, writable: true, configurable: true });
       } else delete state.nicknames[name];
+    }
+    // Remove only unchanged groups created by this import, preserving later edits.
+    state.groups = state.groups.filter(group => {
+      const created = !before.groups.some(item => item.id === group.id) && after.groups.find(item => item.id === group.id);
+      return !created || JSON.stringify(group) !== JSON.stringify(created);
+    });
+    for (const key of ["showGroups", "hideUngrouped"]) {
+      if (before[key] !== after[key] && state[key] === after[key]) state[key] = before[key];
     }
     for (const group of state.groups) {
       const oldGroup = before.groups.find(item => item.id === group.id);
@@ -1277,7 +1309,8 @@
       const groups = (Array.isArray(saved?.groups) ? saved.groups : []).slice(0, 100).filter(group => {
         if (!group || typeof group.id !== "string" || !group.id || ids.has(group.id) || typeof group.name !== "string" || !group.name.trim() || !Array.isArray(group.members)) return false;
         ids.add(group.id); return true;
-      }).map(group => ({ id: group.id, name: group.name.trim().slice(0, 60), members: [...new Set(group.members.filter(name => typeof name === "string"))], hidden: group.hidden === true }));
+      }).map(group => ({ id: group.id, name: group.name.trim().slice(0, 60), members: [...new Set(group.members.filter(name => typeof name === "string"))], hidden: group.hidden === true,
+        ...(typeof group.sharedId === "string" && /^[A-Za-z0-9_-]{1,120}$/.test(group.sharedId) ? { sharedId: group.sharedId } : {}) }));
       return { groups, showGroups: saved?.showGroups === true, hideUngrouped: saved?.hideUngrouped === true };
     } catch { return { groups: [], showGroups: false, hideUngrouped: false }; }
   }
@@ -1329,13 +1362,12 @@
     showToast(persisted ? `${group.name} moved to top.` : "Group moved for this session, but could not be saved on this device.");
   }
 
-  const mobileNavMedia = window.matchMedia("(max-width: 900px)");
   const mobileMenuButton = document.getElementById("mobileMenuButton");
   const mobileNavigation = document.getElementById("homeNavigation");
   const mobileNavBackdrop = document.getElementById("mobileNavBackdrop");
   const closeMobileMenuButton = document.getElementById("closeMobileMenuButton");
   const mobileNavAvailable = Boolean(mobileMenuButton && mobileNavigation && mobileNavBackdrop && closeMobileMenuButton);
-  const usesMobileNavigation = () => mobileNavAvailable && mobileNavMedia.matches;
+  const usesDrawerNavigation = () => mobileNavAvailable;
   let mobileNavOpen = false;
   let mobileNavBackground = [];
   let mobileNavOverflow = "";
@@ -1362,23 +1394,15 @@
 
   function syncMobileNavigation() {
     if (!mobileNavAvailable) return;
-    const wasOpen = mobileNavOpen;
-    const hadMenuFocus = mobileNavigation.contains(document.activeElement) || document.activeElement === mobileMenuButton;
-    if (!usesMobileNavigation()) {
-      closeMobileNavigation(false);
-      mobileNavigation.removeAttribute("inert");
-      mobileNavigation.removeAttribute("aria-hidden");
-      if (wasOpen || hadMenuFocus) els.scheduleDataButton.focus({ preventScroll: true });
-    } else if (!mobileNavOpen) {
+    if (!mobileNavOpen) {
       mobileNavigation.setAttribute("inert", "");
       mobileNavigation.setAttribute("aria-hidden", "true");
-      if (hadMenuFocus) mobileMenuButton.focus({ preventScroll: true });
     }
     scheduleToolbarLayout();
   }
 
   function openMobileNavigation() {
-    if (!usesMobileNavigation() || mobileNavOpen || state.importProgress ||
+    if (!usesDrawerNavigation() || mobileNavOpen || state.importProgress ||
         [...document.querySelectorAll(".modal-backdrop")].some(modal => !modal.hidden)) return;
     mobileNavOpen = true;
     mobileNavOverflow = document.body.style.overflow;
@@ -1405,7 +1429,7 @@
 
   function returnHomeActionFocus(button) {
     if ([...document.querySelectorAll(".modal-backdrop")].some(modal => !modal.hidden)) return;
-    (usesMobileNavigation() ? mobileMenuButton : button)?.focus({ preventScroll: true });
+    (usesDrawerNavigation() ? mobileMenuButton : button)?.focus({ preventScroll: true });
   }
 
   function bindMobileNavigation() {
@@ -1423,7 +1447,6 @@
     mobileNavigation.addEventListener("click", event => {
       if (mobileNavOpen && event.target.closest(".header-actions button")) closeMobileNavigation();
     }, true);
-    mobileNavMedia.addEventListener?.("change", syncMobileNavigation);
     syncMobileNavigation();
   }
 
@@ -1443,7 +1466,7 @@
     // Start with full labels so widening the row restores them automatically.
     els.helpButton.classList.remove("compact-label");
     els.scheduleDataButton.classList.remove("compact-label");
-    if (!usesMobileNavigation()) {
+    if (!usesDrawerNavigation()) {
       if (!fits(nav)) els.helpButton.classList.add("compact-label");
       if (!fits(nav)) els.scheduleDataButton.classList.add("compact-label");
     }
@@ -1488,6 +1511,10 @@
     const busy = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
     els.manageGroupsButton.hidden = !state.showGroups;
     els.manageGroupsButton.disabled = !state.hasData || busy;
+    for (const button of els.peopleList.querySelectorAll("[data-share-group]")) {
+      const group = state.groups.find(item => item.id === button.dataset.shareGroup);
+      button.disabled = busy || !group || !groupMembers(group).length;
+    }
     setViewToggle(els.showGroupsToggle, state.showGroups ? "Hide groups" : "Show groups", state.showGroups);
     scheduleToolbarLayout();
   }
@@ -1692,7 +1719,12 @@
       const week = document.createElement("button"); week.type = "button"; week.className = "secondary-button";
       week.textContent = "Weekly availability"; week.setAttribute("aria-label", `View weekly availability for ${group.name}`);
       week.addEventListener("click", () => { menu.open = false; openGroupWeek(group.id, more); });
-      options.append(top, week); menu.append(more, options); actions.append(menu);
+      const share = document.createElement("button"); share.type = "button"; share.className = "secondary-button";
+      share.textContent = "Share Group"; share.setAttribute("aria-label", `Share group ${group.name}`);
+      share.dataset.shareGroup = group.id;
+      share.disabled = !members.length || state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
+      share.addEventListener("click", () => { menu.open = false; openGroupShare(group, more); });
+      options.append(top, week, share); menu.append(more, options); actions.append(menu);
     }
     header.append(copy, actions);
     section.append(header);
@@ -2071,7 +2103,7 @@
     els.finishImportPictureName.textContent = "Done entering name";
     els.importPictureNameHelp.textContent = "Your name will carry over. If you're typing when loading finishes, we'll wait for you.";
     overlay.querySelector(".import-progress-spinner").hidden = false;
-    overlay.querySelector(".import-progress-note").textContent = title === "Opening shared schedules" ? "Nothing is added until you confirm." : "Please wait until the import finishes.";
+    overlay.querySelector(".import-progress-note").textContent = title === "Opening shared schedules" ? "Please wait while the shared schedules are opened." : "Please wait until the import finishes.";
     overlay.setAttribute("aria-busy", "true");
     overlay.hidden = false;
     document.documentElement.classList.remove("shared-link-starting");
@@ -2164,6 +2196,10 @@
   function setImageStatus(message, tone = "working") {
     els.imageParserStatus.textContent = message;
     els.imageParserStatus.dataset.tone = tone;
+    if (state.codeMode === "import") {
+      els.importImageStatus.textContent = message;
+      els.importImageStatus.dataset.tone = tone;
+    }
     updateImportProgress(message);
   }
 
@@ -2383,7 +2419,7 @@
       state.isParsing = false;
       event.target.value = "";
       updateScheduleModal();
-      endImportProgress(state.pendingImage ? document.getElementById("imageReviewTitle") : els.addScheduleImageButton);
+      endImportProgress(state.pendingImage ? document.getElementById("imageReviewTitle") : state.codeMode === "import" ? els.importScheduleImageButton : els.addScheduleImageButton);
     }
   }
 
@@ -2821,24 +2857,110 @@
     if (element === els.importCodeStatus) updateImportProgress(message);
   }
 
+  function filterExportPeople() {
+    const terms = searchText(els.exportPeopleSearch.value.trim()).split(/\s+/).filter(Boolean);
+    const inputs = [...els.exportPeopleList.querySelectorAll("input")];
+    let visible = 0;
+    for (const input of inputs) {
+      const name = input.dataset.person;
+      const match = terms.every(term => searchText(`${name} ${displayName(name)}`).includes(term));
+      input.closest("label").hidden = !match;
+      if (match) visible++;
+    }
+    const selected = inputs.filter(input => input.checked).length;
+    els.exportPeopleEmpty.hidden = visible > 0;
+    els.exportSelectionSummary.textContent = terms.length ? `${visible} matching · ${selected} selected`
+      : state.exportGroup ? `${state.exportGroup.name} · ${selected} selected`
+      : selected === inputs.length && selected > 0 ? `Everyone · ${selected}` : `${selected} of ${inputs.length} selected`;
+    els.exportSelectionToggleLabel.textContent = els.exportSelection.open ? "Hide people" : "Show people";
+  }
+
+  function syncExportGroup() {
+    els.exportGroupButton.classList.toggle("has-group", Boolean(state.exportGroup));
+    els.exportGroupSummary.hidden = !state.exportGroup;
+    els.exportGroupSummary.textContent = state.exportGroup ? `Sharing ${state.exportGroup.name} as a group. The receiver can keep the group or add its members individually.` : "";
+    updateScheduleFlow();
+  }
+
+  function closeExportGroupPicker(restoreFocus = false) {
+    els.exportGroupPicker.hidden = true;
+    els.exportGroupButton.setAttribute("aria-expanded", "false");
+    if (restoreFocus) els.exportGroupButton.focus({ preventScroll: true });
+  }
+
+  function chooseExportGroup(group) {
+    if (state.isParsing) return;
+    const members = new Set(group ? groupMembers(group) : Object.keys(peopleMap()));
+    if (!members.size) return;
+    state.exportGroup = group ? { id: group.id, name: group.name } : null;
+    els.exportPeopleList.querySelectorAll("input").forEach(input => { input.checked = members.has(input.dataset.person); });
+    els.exportPeopleSearch.value = "";
+    els.exportSelection.open = false;
+    syncExportGroup();
+    exportSelectionChanged();
+    closeExportGroupPicker(true);
+  }
+
+  function toggleExportGroupPicker() {
+    if (state.isParsing) return;
+    if (!els.exportGroupPicker.hidden) { closeExportGroupPicker(true); return; }
+    els.exportGroupPicker.replaceChildren();
+    for (const group of [null, ...state.groups]) {
+      const members = group ? groupMembers(group) : Object.keys(peopleMap());
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "export-group-choice";
+      button.dataset.exportGroup = group?.id || "";
+      button.dataset.empty = String(!members.length);
+      button.disabled = !members.length;
+      const everyoneSelected = [...els.exportPeopleList.querySelectorAll("input")].every(input => input.checked);
+      button.setAttribute("aria-pressed", String(group ? state.exportGroup?.id === group.id : !state.exportGroup && everyoneSelected));
+      const name = document.createElement("span"), count = document.createElement("span");
+      name.textContent = group?.name || "Everyone individually";
+      count.textContent = `${members.length} ${members.length === 1 ? "person" : "people"}`;
+      button.append(name, count);
+      button.addEventListener("click", () => chooseExportGroup(group));
+      els.exportGroupPicker.append(button);
+    }
+    if (!state.groups.length) {
+      const empty = document.createElement("p");
+      empty.className = "share-code-note";
+      empty.textContent = "No saved groups. Create one using the group controls on the main page.";
+      els.exportGroupPicker.append(empty);
+    }
+    els.exportSelection.open = false;
+    els.exportGroupPicker.hidden = false;
+    els.exportGroupButton.setAttribute("aria-expanded", "true");
+    const active = els.exportGroupPicker.querySelector('button[aria-pressed="true"]:not(:disabled)') || els.exportGroupPicker.querySelector('button:not(:disabled)');
+    active?.focus({ preventScroll: true });
+  }
+
   function exportSelectionChanged() {
     const inputs = [...els.exportPeopleList.querySelectorAll("input")];
     const selected = inputs.filter(input => input.checked).length;
     els.selectAllSchedules.checked = selected > 0 && selected === inputs.length;
     els.selectAllSchedules.indeterminate = selected > 0 && selected < inputs.length;
-    els.exportSelectionSummary.textContent = selected === inputs.length && selected > 0 ? `Everyone · ${selected}` : `${selected} of ${inputs.length} selected`;
+    filterExportPeople();
     els.exportCodeOutput.value = "";
     els.exportCodeField.hidden = true;
     resetShareLink(els.exportSharePanel);
     codeStatus(els.exportCodeStatus, `${selected} schedule${selected === 1 ? "" : "s"} selected.`);
   }
 
+  function codePanelReturnFocus() {
+    if (state.quickExportReturnFocus?.isConnected) return state.quickExportReturnFocus;
+    if (state.exportGroup) return [...els.peopleList.querySelectorAll(".people-group")].find(section => section.dataset.groupId === state.exportGroup.id)?.querySelector(".group-more") || els.homeExportButton;
+    return state.quickExportReturnFocus;
+  }
+
   function closeCodePanels() {
     if (state.isParsing) return;
-    const fromHome = state.quickExport, returnFocus = state.quickExportReturnFocus;
+    const fromHome = state.quickExport, returnFocus = codePanelReturnFocus();
     state.codeMode = null;
     state.quickExport = false;
     state.quickExportReturnFocus = null;
+    state.exportGroup = null;
+    closeExportGroupPicker();
     resetSharedImport();
     resetShareLink(els.exportSharePanel);
     els.codeExportPanel.hidden = true;
@@ -2856,9 +2978,17 @@
   function openQuickCodePanel(mode, event) {
     if (state.isParsing || state.pendingImage || state.codeMode || (mode === "export" && !Object.keys(peopleMap()).length)) return;
     if (!els.helpModal.hidden) closeHelp();
-    state.quickExportReturnFocus = usesMobileNavigation() ? mobileMenuButton : event?.currentTarget || (mode === "import" ? els.homeImportButton : els.homeExportButton);
+    state.quickExportReturnFocus = usesDrawerNavigation() ? mobileMenuButton : event?.currentTarget || (mode === "import" ? els.homeImportButton : els.homeExportButton);
     openScheduleModal();
     openCodePanel(mode, true);
+  }
+
+  function openGroupShare(group, returnFocus) {
+    if (state.isParsing || state.pendingImage || state.codeMode) return;
+    if (!groupMembers(group).length) { showToast("This group has no schedules to share."); return; }
+    state.quickExportReturnFocus = returnFocus;
+    openScheduleModal();
+    openCodePanel("export", true, group);
   }
 
   function openHelp() {
@@ -2876,36 +3006,47 @@
     returnHomeActionFocus(els.helpButton);
   }
 
-  function openCodePanel(mode, quick = false) {
+  function openCodePanel(mode, quick = false, group = null) {
     if (state.isParsing || state.pendingImage || state.codeMode) return;
     resetSharedImport();
     state.codeMode = mode;
     state.quickExport = quick;
+    state.exportGroup = group ? { id: group.id, name: group.name } : null;
     els.codeExportPanel.hidden = mode !== "export";
     els.codeImportPanel.hidden = mode !== "import";
     if (mode === "export") {
       resetExportFields(els.exportFieldOptions);
+      els.exportSelectionControls.hidden = Boolean(group);
+      els.exportPeopleSearch.value = "";
+      closeExportGroupPicker();
+      els.exportSelection.hidden = Boolean(group);
       els.exportPeopleList.replaceChildren();
-      for (const name of Object.keys(peopleMap()).sort(comparePeopleNames)) {
+      for (const name of (group ? groupMembers(group) : Object.keys(peopleMap())).sort(comparePeopleNames)) {
         const label = document.createElement("label");
         label.className = "share-selection";
         const input = document.createElement("input");
         input.type = "checkbox";
         input.checked = quick;
         input.dataset.person = name;
-        input.addEventListener("change", exportSelectionChanged);
+        input.addEventListener("change", () => {
+          state.exportGroup = null;
+          syncExportGroup();
+          exportSelectionChanged();
+        });
         const caption = document.createElement("span");
         caption.textContent = displayName(name) === name ? name : `${displayName(name)} (${name})`;
         label.append(input, caption);
         els.exportPeopleList.append(label);
       }
-      exportSelectionChanged();
+      syncExportGroup();
       els.exportSelection.open = !quick;
+      exportSelectionChanged();
       revealSection(els.codeExportPanel, quick ? els.generateCodeButton : els.exportSelection.querySelector("summary"));
     } else {
       els.importCodeInput.value = "";
+      els.importImageStatus.textContent = "";
       codeStatus(els.importCodeStatus, "");
-      revealSection(els.codeImportPanel, els.importCodeInput);
+      revealSection(els.codeImportPanel, els.importScheduleImageButton);
     }
     updateScheduleModal();
   }
@@ -2918,7 +3059,7 @@
 
   function encodeSchedules(names, options) {
     const fields = [...options.querySelectorAll("input:checked")].map(input => input.dataset.exportField);
-    return window.WhosFreeShareCode.encode({ people: Object.fromEntries(names.map(name => [name, peopleMap()[name]])) }, { fields });
+    return window.WhosFreeShareCode.encode({ people: Object.fromEntries(names.map(name => [name, peopleMap()[name]])), ...(state.exportGroup ? { shared_group: state.exportGroup } : {}) }, { fields });
   }
 
   function shareCodeReadyMessage(count, code) {
@@ -2956,10 +3097,16 @@
     } catch (error) {
       els.exportCodeOutput.value = "";
       codeStatus(els.exportCodeStatus, error.message || "The code could not be created.", "error");
+      if (action === "qr" && /too large|too much|export fewer/i.test(error.message || "")) {
+        els.exportSharePanel.hidden = false;
+        codeStatus(els.exportSharePanel.querySelector(".share-link-status"), names.length > 1 ? "Too much data for one QR. Select fewer schedules, copy the code or link, or export multiple QR codes." : "Too much data for one QR. Copy the code or link.", "error");
+        offerMultipleQr();
+      }
     } finally { state.isParsing = false; updateScheduleModal(); }
   }
 
   function resetShareLink(panel) {
+    if (panel === els.exportSharePanel) resetMultipleQr();
     panel.hidden = true;
     panel.querySelector("textarea").value = "";
     const qr = panel.querySelector(".share-qr");
@@ -2985,10 +3132,145 @@
     if (!output.value) return;
     try {
       await navigator.clipboard.writeText(output.value);
-      codeStatus(status, "Link copied. Your friend can open it to review and add schedules.", "success");
+      showToast("Copied");
+      codeStatus(status, panel === els.exportSharePanel && state.exportGroup ? "Link copied. Your friend can keep the group or add everybody individually." : "Link copied. Your friend can open it to add schedules automatically.", "success");
     } catch {
       output.focus(); output.select();
       codeStatus(status, "Select and copy the link above.");
+    }
+  }
+
+  function resetMultipleQr() {
+    state.qrBatchRequest++;
+    state.qrBatchBusy = false;
+    if (els.multipleQrProgress) {
+      els.multipleQrProgress.hidden = true;
+      els.multipleQrProgress.value = 0;
+      els.multipleQrProgress.removeAttribute("aria-valuetext");
+    }
+    if (els.multipleQrButton) {
+      els.multipleQrButton.hidden = true; els.multipleQrButton.disabled = false;
+      els.multipleQrButton.setAttribute("aria-expanded", "false");
+    }
+    if (els.multipleQrCodes) {
+      els.multipleQrCodes.hidden = true;
+      els.multipleQrCodes.removeAttribute("aria-busy");
+      els.multipleQrCodes.replaceChildren();
+    }
+  }
+
+  function offerMultipleQr() {
+    if (els.multipleQrButton && els.exportPeopleList.querySelectorAll("input:checked").length > 1) {
+      els.multipleQrButton.hidden = false;
+      els.multipleQrButton.disabled = false;
+    }
+  }
+
+  function scheduleQrSvg(link, label = "Scan to add these schedules in UFree") {
+    if (new TextEncoder().encode(link).length > 2331) throw new RangeError("QR selection too large");
+    const generator = window.qrcodegen;
+    if (!generator) throw new Error("QR generator unavailable");
+    const code = generator.QrCode.encodeText(link, generator.QrCode.Ecc.MEDIUM);
+    const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+    const size = code.size + 8;
+    svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+    svg.setAttribute("role", "img"); svg.setAttribute("aria-label", label);
+    svg.setAttribute("shape-rendering", "crispEdges");
+    const background = document.createElementNS(ns, "rect");
+    background.setAttribute("width", String(size)); background.setAttribute("height", String(size)); background.setAttribute("fill", "#fff");
+    const path = document.createElementNS(ns, "path"), cells = [];
+    for (let y = 0; y < code.size; y++) for (let x = 0; x < code.size; x++) if (code.getModule(x, y)) cells.push(`M${x + 4},${y + 4}h1v1h-1z`);
+    path.setAttribute("d", cells.join("")); path.setAttribute("fill", "#000");
+    svg.append(background, path);
+    return { svg, version: code.version };
+  }
+
+  async function generateMultipleQr() {
+    if (state.isParsing || state.qrBatchBusy || state.codeMode !== "export") return;
+    const names = [...els.exportPeopleList.querySelectorAll("input:checked")].map(input => input.dataset.person);
+    if (names.length < 2) return;
+    const request = ++state.qrBatchRequest;
+    const current = () => request === state.qrBatchRequest && state.codeMode === "export" && !els.scheduleModal.hidden;
+    const status = els.exportSharePanel.querySelector(".share-link-status");
+    const people = Object.fromEntries(names.map(name => [name, peopleMap()[name]]));
+    const fields = [...els.exportFieldOptions.querySelectorAll("input:checked")].map(input => input.dataset.exportField);
+    const sharedGroup = state.exportGroup ? { ...state.exportGroup } : null;
+    state.qrBatchBusy = true;
+    els.multipleQrButton.disabled = true;
+    els.multipleQrButton.setAttribute("aria-expanded", "false");
+    els.multipleQrCodes.hidden = true;
+    els.multipleQrCodes.replaceChildren();
+    els.multipleQrCodes.setAttribute("aria-busy", "true");
+    const updateProgress = (value, message) => {
+      if (!current()) return;
+      els.multipleQrProgress.value = Math.max(els.multipleQrProgress.value, Math.min(100, value));
+      els.multipleQrProgress.setAttribute("aria-valuetext", message);
+      const note = `${message} You can close this view to cancel.`;
+      if (status.textContent !== note) codeStatus(status, note);
+    };
+    els.multipleQrProgress.value = 0;
+    els.multipleQrProgress.hidden = false;
+    updateProgress(0, `Preparing QR codes for ${names.length} people…`);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      if (!current()) return;
+      if (!window.WhosFreeQrBatches?.pack) throw new Error("The QR tools did not load. Refresh the app and try again.");
+      const result = await window.WhosFreeQrBatches.pack(names, async members => {
+        try {
+          const code = await window.WhosFreeShareCode.encode({ people: Object.fromEntries(members.map(name => [name, people[name]])), ...(sharedGroup ? { shared_group: sharedGroup } : {}) }, { fields });
+          return window.WhosFreeShareCode.createLink(code, APP_URL);
+        } catch (error) {
+          if (/too large|too much|export fewer/i.test(error.message || "")) return null;
+          throw error;
+        }
+      }, {
+        fullLink: els.exportSharePanel.querySelector("textarea").value,
+        isCancelled: () => !current(),
+        onProgress: info => {
+          const message = info.phase === "checking" ? `Checking schedules: ${info.processed} of ${names.length}…`
+            : info.phase === "packing" ? `Combining schedules: ${info.processed} of ${info.total ?? names.length}…` : "Preparing QR images…";
+          updateProgress(info.progress * 85, message);
+        },
+      });
+      if (!current()) return;
+      updateProgress(85, `Drawing QR codes: 0 of ${result.groups.length}…`);
+      const fragment = document.createDocumentFragment();
+      const instructions = document.createElement("p");
+      instructions.textContent = sharedGroup ? "Scan each QR separately, in any order. Choose Add to group to collect its listed people in the same group, or add everybody individually." : "Scan each QR separately. Its listed people are added automatically. You can scan them in any order.";
+      fragment.append(instructions);
+      for (let i = 0; i < result.groups.length; i++) {
+        if (!current()) return;
+        const group = result.groups[i], card = document.createElement("section");
+        card.className = "qr-batch-card";
+        const heading = document.createElement("h4");
+        heading.textContent = `QR ${i + 1} of ${result.groups.length} · ${group.names.length} ${group.names.length === 1 ? "person" : "people"}`;
+        const list = document.createElement("p"); list.textContent = group.names.map(displayName).join(", ");
+        const qr = document.createElement("div"); qr.className = "share-qr";
+        qr.append(scheduleQrSvg(group.link, `${heading.textContent}: ${list.textContent}`).svg);
+        card.append(heading, list, qr); fragment.append(card);
+        updateProgress(85 + 15 * (i + 1) / result.groups.length, `Drawing QR codes: ${i + 1} of ${result.groups.length}…`);
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      if (!current()) return;
+      updateProgress(100, "QR codes ready.");
+      const covered = names.length - result.oversized.length;
+      const message = result.oversized.length
+        ? `${result.groups.length} QR ${result.groups.length === 1 ? "code covers" : "codes cover"} ${covered} of ${names.length} people. ${result.oversized.map(displayName).join(", ")} cannot fit in a QR individually with these details. Share those people by code or link, or choose fewer extra details.`
+        : `${result.groups.length} independent QR ${result.groups.length === 1 ? "code covers" : "codes cover"} all ${names.length} people. Scroll down to scan each one.`;
+      els.multipleQrCodes.replaceChildren(fragment);
+      els.multipleQrCodes.hidden = result.groups.length === 0;
+      els.multipleQrButton.setAttribute("aria-expanded", String(result.groups.length > 0));
+      codeStatus(status, message, result.oversized.length ? "warning" : "success");
+      if (result.groups.length) revealSection(els.multipleQrCodes, els.multipleQrCodes);
+    } catch (error) {
+      if (current()) codeStatus(status, error.message || "The QR codes could not be created. Try again, or copy a code or link.", "error");
+    } finally {
+      if (current()) {
+        state.qrBatchBusy = false;
+        els.multipleQrProgress.hidden = true;
+        els.multipleQrButton.disabled = false;
+        els.multipleQrCodes.removeAttribute("aria-busy");
+      }
     }
   }
 
@@ -3002,38 +3284,71 @@
     const link = panel.querySelector("textarea").value;
     if (!link) return;
     try {
-      if (link.length > 2331) throw new RangeError("QR selection too large");
-      const generator = window.qrcodegen;
-      if (!generator) throw new Error("QR generator unavailable");
-      const code = generator.QrCode.encodeText(link, generator.QrCode.Ecc.MEDIUM);
-      const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
-      const size = code.size + 8;
-      svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
-      svg.setAttribute("role", "img");
-      svg.setAttribute("aria-label", "Scan to review and add these schedules in UFree");
-      svg.setAttribute("shape-rendering", "crispEdges");
-      const background = document.createElementNS(ns, "rect");
-      background.setAttribute("width", String(size)); background.setAttribute("height", String(size)); background.setAttribute("fill", "#fff");
-      const path = document.createElementNS(ns, "path"), cells = [];
-      for (let y = 0; y < code.size; y++) for (let x = 0; x < code.size; x++) if (code.getModule(x, y)) cells.push(`M${x + 4},${y + 4}h1v1h-1z`);
-      path.setAttribute("d", cells.join("")); path.setAttribute("fill", "#000");
-      svg.append(background, path); qr.replaceChildren(svg); qr.hidden = false;
+      const { svg, version } = scheduleQrSvg(link);
+      qr.replaceChildren(svg); qr.hidden = false;
       if (!staticLabel) button.textContent = "Hide QR"; button.setAttribute("aria-expanded", "true");
-      codeStatus(status, code.version > 25 ? "Scan with your phone camera. This QR is dense; select fewer people if scanning is difficult." : "Scan with your phone camera, then open the link. Anyone with the QR or link can read these schedules.");
+      codeStatus(status, version > 25 ? "Scan with your phone camera. This QR is dense; select fewer people if scanning is difficult." : "Scan with your phone camera, then open the link. Anyone with the QR or link can read these schedules.");
       revealSection(qr);
     } catch (error) {
-      codeStatus(status, error instanceof RangeError ? "Too much data for one QR. Select fewer schedules, or copy the code or link." : "QR could not be created. Refresh the app, or copy the link.", "error");
+      const multipleAvailable = panel === els.exportSharePanel && els.exportPeopleList.querySelectorAll("input:checked").length > 1;
+      const overflowMessage = multipleAvailable ? "Too much data for one QR. Select fewer schedules, copy the code or link, or export multiple QR codes." : "Too much data for one QR. Select fewer schedules, or copy the code or link.";
+      codeStatus(status, error instanceof RangeError ? overflowMessage : "QR could not be created. Refresh the app, or copy the link.", "error");
+      if (error instanceof RangeError && panel === els.exportSharePanel) {
+        offerMultipleQr();
+        revealSection(status, els.multipleQrButton && !els.multipleQrButton.hidden ? els.multipleQrButton : null);
+      }
     }
   }
 
   function resetSharedImport() {
     state.sharedImport = null;
+    state.groupImportAutomatic = false;
+    els.sharedGroupImport.hidden = true;
+    els.sharedGroupName.value = "";
+    els.sharedGroupError.textContent = "";
+    els.importScheduleImageButton.hidden = false;
+    els.decodeCodeButton.hidden = false;
     els.sharedImportPreview.hidden = true;
     els.sharedImportPeople.replaceChildren();
     els.importCodeField.hidden = false;
     els.importCodeHelp.hidden = false;
     els.decodeCodeButton.textContent = "Import schedules";
     els.closeImportButton.textContent = "Done";
+  }
+
+  function showSharedGroupImport(imported, automatic) {
+    state.sharedImport = imported;
+    state.groupImportAutomatic = automatic;
+    const source = imported.shared_group;
+    const existing = state.groups.find(group => group.sharedId === source.id);
+    let name = existing?.name || source.name;
+    if (!existing) {
+      for (let number = 2; state.groups.some(group => normalizedScheduleName(group.name) === normalizedScheduleName(name)); number++) {
+        const suffix = ` ${number}`; name = source.name.slice(0, 60 - suffix.length).trimEnd() + suffix;
+      }
+    }
+    els.sharedGroupName.value = name;
+    const names = Object.keys(imported.people);
+    els.sharedGroupSummary.textContent = `${source.name} · ${names.length} ${names.length === 1 ? "member" : "members"}: ${names.join(", ")}`;
+    els.sharedGroupError.textContent = "";
+    els.sharedGroupImport.hidden = false;
+    els.sharedImportPreview.hidden = true;
+    els.importScheduleImageButton.hidden = true;
+    els.importCodeField.hidden = true;
+    els.importCodeHelp.hidden = true;
+    els.importImageStatus.textContent = "";
+    els.decodeCodeButton.hidden = true;
+    els.closeImportButton.textContent = "Cancel";
+    codeStatus(els.importCodeStatus, "");
+  }
+
+  function sharedGroupDestination(imported) {
+    const name = els.sharedGroupName.value.trim();
+    if (!name || name.length > 60) throw new Error("Enter a group name of up to 60 characters.");
+    const existing = state.groups.find(group => group.sharedId === imported.shared_group.id && normalizedScheduleName(group.name) === normalizedScheduleName(name));
+    if (state.groups.some(group => group.id !== existing?.id && normalizedScheduleName(group.name) === normalizedScheduleName(name))) throw new Error("A group already uses this name. Choose another name.");
+    if (!existing && state.groups.length >= 100) throw new Error("You can save up to 100 groups. Add everybody individually or remove a group first.");
+    return { name, existing };
   }
 
   async function previewSharedImport(input) {
@@ -3047,6 +3362,10 @@
       await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
       const imported = await window.WhosFreeShareCode.decode(input);
       validateData(imported);
+      if (imported.shared_group) {
+        if (state.loadError) throw new Error("Your saved schedules could not be loaded. Nothing was imported. Resolve the storage error first.");
+        showSharedGroupImport(imported, false); return;
+      }
       state.sharedImport = imported;
       els.sharedImportPeople.replaceChildren();
       for (const [name, person] of Object.entries(imported.people)) {
@@ -3069,7 +3388,7 @@
     } finally {
       state.isParsing = false; updateScheduleModal();
       endImportProgress(els.decodeCodeButton);
-      els.decodeCodeButton.focus({ preventScroll: true });
+      (state.sharedImport?.shared_group ? els.sharedGroupName : els.decodeCodeButton).focus({ preventScroll: true });
     }
   }
 
@@ -3084,8 +3403,8 @@
       showToast("Finish the current import or export, then open the shared link again."); return;
     }
     const input = location.href;
-    // Consume the fragment before opening dialogs, so refresh cannot import it again.
-    try { history.replaceState(null, "", location.pathname + location.search); } catch { /* Read-only browser histories still show the preview. */ }
+    // Consume the fragment once so refresh cannot import it again.
+    try { history.replaceState(null, "", location.pathname + location.search); } catch { /* Read-only browser histories can still import the link. */ }
     if (!els.personQuickShareModal.hidden) closePersonQuickShare();
     if (!els.personGroupModal.hidden) closePersonGroup();
     if (!els.personWeekModal.hidden) closePersonWeek();
@@ -3096,7 +3415,7 @@
     openScheduleModal();
     openCodePanel("import");
     els.importCodeInput.value = input;
-    await previewSharedImport(input);
+    await importShareCode({ automatic: true });
   }
 
   async function copyExportCode(output, status, isCurrent = () => true) {
@@ -3105,6 +3424,7 @@
     try {
       await navigator.clipboard.writeText(output.value);
       if (!isCurrent()) return;
+      showToast("Copied");
       codeStatus(status, `Code copied. Paste it into your message. ${details}`, "success");
     } catch {
       if (!isCurrent()) return;
@@ -3133,37 +3453,78 @@
     resolve(choice);
   }
 
-  async function importShareCode() {
+  async function importShareCode({ automatic = false, groupChoice = null } = {}) {
     if (state.isParsing || state.codeMode !== "import") return;
-    if (!state.sharedImport && /^(?:https?:\/\/|WFL[56])/i.test(els.importCodeInput.value.trim())) { await previewSharedImport(els.importCodeInput.value); return; }
-    const selected = state.sharedImport ? [...els.sharedImportPeople.querySelectorAll("input:checked")].map(input => input.dataset.person) : null;
+    if (!automatic && !state.sharedImport && /^(?:https?:\/\/|WFL[567])/i.test(els.importCodeInput.value.trim())) { await previewSharedImport(els.importCodeInput.value); return; }
+    const selected = state.sharedImport && !state.sharedImport.shared_group ? [...els.sharedImportPeople.querySelectorAll("input:checked")].map(input => input.dataset.person) : null;
     if (selected && !selected.length) return;
     if (!els.importCodeInput.value.trim()) { codeStatus(els.importCodeStatus, "Paste a code to import.", "error"); els.importCodeInput.focus(); return; }
     state.isParsing = true;
     updateScheduleModal();
     codeStatus(els.importCodeStatus, "Opening the code on this device…");
-    startImportProgress("Opening the code on this device…");
+    startImportProgress(automatic ? "Adding the shared schedules on this device…" : "Opening the code on this device…");
+    let automaticMessage = null;
     try {
-      const imported = state.sharedImport ? { ...state.sharedImport, people: Object.fromEntries(selected.map(name => [name, state.sharedImport.people[name]])) } : await window.WhosFreeShareCode.decode(els.importCodeInput.value);
+      if (automatic && state.loadError) throw new Error("Your saved schedules could not be loaded. Nothing was imported. Resolve the storage error before opening this link again.");
+      // Let the loading popup paint before decoding a potentially large QR link.
+      if (automatic) await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+      const imported = state.sharedImport ? selected ? { ...state.sharedImport, people: Object.fromEntries(selected.map(name => [name, state.sharedImport.people[name]])) } : state.sharedImport : await window.WhosFreeShareCode.decode(els.importCodeInput.value);
       validateData(imported);
+      if (imported.shared_group) {
+        if (state.loadError) throw new Error("Your saved schedules could not be loaded. Nothing was imported. Resolve the storage error first.");
+        if (!groupChoice) { showSharedGroupImport(imported, automatic); return; }
+      }
+      let destination = null;
+      if (imported.shared_group && groupChoice === "group") {
+        try { destination = sharedGroupDestination(imported); }
+        catch (error) { els.sharedGroupError.textContent = error.message; return; }
+      }
       applyAutomaticSemester(imported);
-      const result = await window.WhosFreeShareCode.merge(state.hasData ? state.data : null, imported, resolveCodeConflict);
+      const result = await window.WhosFreeShareCode.merge(state.hasData ? state.data : null, imported, automatic ? () => "old" : resolveCodeConflict);
       validateData(result.data);
       const before = captureScheduleChange();
       let warning = null;
       if (result.added || result.replaced) {
         state.data = result.data;
         warning = await persistCurrentDatabase("Local schedule collection");
-        rememberScheduleChange(before, `Imported ${result.added} and replaced ${result.replaced || 0} schedules from a code`);
       }
+      let groupNote = "", groupChanged = false;
+      if (destination) {
+        const members = [...new Set(Object.values(result.nameMap))];
+        const existing = destination.existing;
+        if (existing) {
+          const combined = [...new Set([...existing.members, ...members])];
+          groupChanged = combined.length !== existing.members.length;
+          existing.members = combined;
+        } else {
+          const id = window.crypto?.randomUUID?.() || `group-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          state.groups.push({ id, name: destination.name, members, hidden: false, sharedId: imported.shared_group.id });
+          groupChanged = true;
+        }
+        const wasGrouped = state.showGroups;
+        state.showGroups = true;
+        groupChanged ||= !wasGrouped;
+        const saved = !groupChanged || saveGroupPreferences();
+        groupNote = saved ? ` · Group: ${destination.name}` : ` · Group: ${destination.name} (this session only; the browser could not save it)`;
+        refresh({ preserveScroll: true });
+      }
+      if (groupChanged) rememberUndoChange({ ...before, label: `Imported group ${destination.name}`, afterPreferences: scheduleUndoPreferences() });
+      else if (result.added || result.replaced) rememberScheduleChange(before, `Imported ${result.added} and replaced ${result.replaced || 0} schedules from a code`);
       const renameNote = result.renamed.length ? ` Imported different schedules as ${result.renamed.map(item => item.to).join(", ")}. You can edit their names in the people list.` : "";
       const choicesNote = result.replaced || result.kept ? ` Replaced ${result.replaced || 0}. Kept ${result.kept || 0} old schedules.` : "";
       codeStatus(els.importCodeStatus, warning || `Imported ${result.added} schedule${result.added === 1 ? "" : "s"}. Skipped ${result.skipped} identical schedules.${choicesNote}${renameNote}`, warning ? "error" : "success");
-      showToast(warning || scheduleImportToast(before));
+      if (automatic || groupChoice) {
+        automaticMessage = `Added ${result.added} ${result.added === 1 ? "person" : "people"} · Skipped ${result.skipped + result.kept}${result.replaced ? ` · Updated ${result.replaced}` : ""}${groupNote}${warning ? `. ${warning}` : ""}`;
+      } else showToast(warning || scheduleImportToast(before));
       if (state.sharedImport) { resetSharedImport(); els.importCodeInput.value = ""; }
     } catch (error) {
       codeStatus(els.importCodeStatus, error.message || "The code could not be imported.", "error");
-    } finally { finishCodeConflict(null); state.isParsing = false; updateScheduleModal(); endImportProgress(els.decodeCodeButton); els.decodeCodeButton.focus({ preventScroll: true }); }
+    } finally {
+      finishCodeConflict(null); state.isParsing = false; updateScheduleModal();
+      endImportProgress(els.decodeCodeButton);
+      if (automaticMessage !== null) { closeScheduleModal(); showToast(automaticMessage); }
+      else (state.sharedImport?.shared_group ? els.sharedGroupName : els.decodeCodeButton).focus({ preventScroll: true });
+    }
   }
 
   async function handleLocalScheduleFile(event) {
@@ -3396,12 +3757,13 @@
     }
     els.codeImportPanel.hidden = state.codeMode !== "import";
     els.codeExportPanel.hidden = state.codeMode !== "export";
-    document.getElementById("scheduleModalTitle").textContent = flow === "review" ? "Review schedule" : flow === "code-import" ? "Import schedules" : flow === "code-export" ? state.quickExport ? "Quick share" : "Share schedules" : "Schedule data";
+    document.getElementById("scheduleModalTitle").textContent = flow === "review" ? "Review schedule" : flow === "code-import" ? "Import" : flow === "code-export" ? state.exportGroup ? `Share group: ${state.exportGroup.name}` : state.quickExport ? "Quick share" : "Share schedules" : "Schedule data";
     dialog.querySelector(".modal-header p").hidden = Boolean(flow);
     if (flow) dialog.dataset.scheduleFlow = flow;
     else delete dialog.dataset.scheduleFlow;
     if (previous !== flow) {
       dialog.scrollTop = 0;
+      if (previous === "review" && flow === "code-import") revealSection(els.codeImportPanel, els.importScheduleImageButton);
       if (!flow && !els.scheduleModal.hidden && !state.importProgress) {
         const target = previous === "review" ? els.addScheduleImageButton : previous === "code-export" ? els.exportSchedulesButton : els.importCodeButton;
         target.focus({ preventScroll: true });
@@ -3419,14 +3781,21 @@
     els.homeExportButton.disabled = importBusy || peopleCount === 0;
     if (els.homeImportButton) els.homeImportButton.disabled = importBusy;
     els.importCodeButton.disabled = importBusy;
+    els.importScheduleImageButton.disabled = state.isParsing || Boolean(state.pendingImage) || Boolean(state.sharedImport);
     els.generateCodeButton.disabled = state.isParsing;
     els.exportQrButton.disabled = state.isParsing;
     els.copyExportLinkButton.disabled = state.isParsing;
     els.decodeCodeButton.disabled = state.isParsing || Boolean(state.sharedImport && !els.sharedImportPeople.querySelector("input:checked"));
     els.closeImportButton.disabled = state.isParsing;
     els.importCodeInput.disabled = state.isParsing;
+    els.sharedGroupName.disabled = state.isParsing;
+    els.addSharedGroupButton.disabled = state.isParsing;
+    els.addSharedPeopleButton.disabled = state.isParsing;
     els.closeScheduleModal.disabled = Boolean(state.codeMode) && state.isParsing;
     els.selectAllSchedules.disabled = state.isParsing;
+    els.exportPeopleSearch.disabled = state.isParsing;
+    els.exportGroupButton.disabled = state.isParsing;
+    els.exportGroupPicker.querySelectorAll("button").forEach(button => { button.disabled = state.isParsing || button.dataset.empty === "true"; });
     els.exportPeopleList.querySelectorAll("input").forEach(input => { input.disabled = state.isParsing; });
     els.exportFieldOptions.querySelectorAll("input, button").forEach(input => { input.disabled = state.isParsing; });
     els.sharedImportPeople.querySelectorAll("input").forEach(input => { input.disabled = state.isParsing; });
@@ -3485,12 +3854,14 @@
   }
 
   function closeScheduleModal() {
-    const navigationReturnFocus = state.quickExportReturnFocus;
+    const navigationReturnFocus = codePanelReturnFocus();
+    const fromGroup = Boolean(state.exportGroup);
     if (state.codeMode && state.isParsing) return;
     if (state.codeMode) closeCodePanels();
     els.scheduleModal.hidden = true;
     if (els.settingsModal.hidden) document.body.style.overflow = "";
-    returnHomeActionFocus(navigationReturnFocus || els.scheduleDataButton);
+    if (fromGroup && navigationReturnFocus?.isConnected) navigationReturnFocus.focus({ preventScroll: true });
+    else returnHomeActionFocus(navigationReturnFocus || els.scheduleDataButton);
   }
 
   async function removeSchedules() {
@@ -3544,7 +3915,7 @@
   }
 
   function personQuickShareButtons() {
-    return [els.personQuickUrlButton, els.personQuickQrButton, els.personQuickCodeButton];
+    return [els.personQuickCodeButton, els.personQuickQrButton, els.personQuickUrlButton];
   }
 
   function resetPersonQuickOutputs() {
@@ -4355,6 +4726,7 @@
       if (els.advancedScheduleOptions.open && !els.scheduleModal.hidden) revealSection(els.advancedSchedulePanel);
     });
     els.addScheduleImageButton.addEventListener("click", chooseScheduleImage);
+    els.importScheduleImageButton.addEventListener("click", chooseScheduleImage);
     els.scheduleImageInput.addEventListener("change", handleScheduleImage);
     els.manualScheduleButton.addEventListener("click", () => openManualSchedule());
     els.addReviewClassButton.addEventListener("click", () => {
@@ -4379,12 +4751,29 @@
     els.shareSchedulesButton.addEventListener("click", shareSchedules);
     els.exportSchedulesButton.addEventListener("click", () => openCodePanel("export"));
     els.importCodeButton.addEventListener("click", () => openCodePanel("import"));
+    els.exportPeopleSearch.addEventListener("focus", () => {
+      closeExportGroupPicker();
+      els.exportSelection.open = true;
+      filterExportPeople();
+    });
+    els.exportPeopleSearch.addEventListener("input", () => {
+      els.exportSelection.open = true;
+      filterExportPeople();
+    });
+    els.exportSelection.addEventListener("toggle", filterExportPeople);
+    els.exportGroupButton.addEventListener("click", toggleExportGroupPicker);
+    document.addEventListener("click", event => {
+      if (!els.exportGroupPicker.hidden && !els.exportGroupPicker.contains(event.target) && !els.exportGroupButton.contains(event.target)) closeExportGroupPicker();
+    });
     els.selectAllSchedules.addEventListener("change", () => {
+      state.exportGroup = null;
+      syncExportGroup();
       els.exportPeopleList.querySelectorAll("input").forEach(input => { input.checked = els.selectAllSchedules.checked; });
       exportSelectionChanged();
     });
     els.generateCodeButton.addEventListener("click", () => generateShareCode("code"));
     els.exportQrButton.addEventListener("click", () => generateShareCode("qr"));
+    els.multipleQrButton?.addEventListener("click", generateMultipleQr);
     els.copyExportLinkButton.addEventListener("click", () => generateShareCode("link"));
     for (const options of [els.exportFieldOptions, els.personQuickExportFields]) {
       const changed = options === els.exportFieldOptions ? exportSelectionChanged : personQuickFieldsChanged;
@@ -4395,6 +4784,9 @@
       });
     }
     els.decodeCodeButton.addEventListener("click", importShareCode);
+    els.addSharedGroupButton.addEventListener("click", () => importShareCode({ automatic: state.groupImportAutomatic, groupChoice: "group" }));
+    els.addSharedPeopleButton.addEventListener("click", () => importShareCode({ automatic: state.groupImportAutomatic, groupChoice: "individual" }));
+    els.sharedGroupName.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); els.addSharedGroupButton.click(); } });
     els.codeConflictPrompt.addEventListener("click", event => {
       const button = event.target.closest("[data-code-conflict-action]");
       if (button) finishCodeConflict(button.dataset.codeConflictAction);
@@ -4448,6 +4840,7 @@
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
       if (event.key !== "Escape") return;
+      if (!els.scheduleModal.hidden && !els.exportGroupPicker.hidden) { event.preventDefault(); closeExportGroupPicker(true); return; }
       const exportMenu = [els.exportFieldOptions, els.personQuickExportFields].find(menu => menu.open && !menu.closest("[hidden]"));
       if (exportMenu) { event.preventDefault(); exportMenu.open = false; exportMenu.querySelector("summary").focus(); return; }
       if (state.codeConflict) { event.preventDefault(); finishCodeConflict("old"); return; }
@@ -4511,7 +4904,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=96", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=121", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

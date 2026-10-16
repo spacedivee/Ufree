@@ -47,6 +47,8 @@ test("Export includes only chosen people; Import adds new people and leaves dupl
     assert.ok(code.length);
     assert.deepEqual(Object.keys((await sender.window.WhosFreeShareCode.decode(code)).people), ["Alice", "Bob"]);
     assert.equal(sender.copied(), code);
+    assert.equal(sender.el("toast").textContent, "Copied");
+    assert.equal(sender.el("toast").hidden, false);
     assert.match(sender.el("exportCodeStatus").textContent, /Code copied/);
     assert.equal(sender.el("copyCodeButton"), null);
     receiver.el("importCodeButton").click();
@@ -150,6 +152,7 @@ for (const clipboard of ["denied", "unavailable"]) test(`Code keeps a selectable
     assert.equal(sender.window.document.activeElement, output);
     assert.equal(output.selectionEnd, output.value.length);
     assert.match(sender.el("exportCodeStatus").textContent, /Select and copy/);
+    assert.notEqual(sender.el("toast").textContent, "Copied");
     assert.equal(sender.el("generateCodeButton").disabled, false);
     assert.equal(JSON.stringify(sender.stored()), before);
   } finally { await sender.window.happyDOM.abort(); }
@@ -262,3 +265,41 @@ test("PDF and JSON tools are closed behind a bottom menu without moving the earl
 
 
 
+
+
+test("copied confirmation uses the existing automatic toast dismissal", async () => {
+  const a = await app({ people: { Friend: { classes: [] } } });
+  try {
+    let dismiss;
+    const setTimeout = a.window.setTimeout.bind(a.window);
+    a.window.setTimeout = (callback, delay, ...args) => {
+      if (delay === 2600) { dismiss = callback; return 999999; }
+      return setTimeout(callback, delay, ...args);
+    };
+    a.el("homeExportButton").click(); a.el("generateCodeButton").click(); await a.wait();
+    assert.equal(a.el("toast").textContent, "Copied");
+    assert.equal(a.el("toast").hidden, false);
+    assert.equal(typeof dismiss, "function");
+    dismiss();
+    assert.equal(a.el("toast").hidden, true);
+  } finally { await a.window.happyDOM.abort(); }
+});
+
+test('sharing 300 schedules copies a code and link rather than rejecting the collection', async () => {
+  const data = { people: Object.fromEntries(Array.from({ length: 300 }, (_, i) => [`TEST ${String(i + 1).padStart(4, '0')}`, {
+    classes: [{ day: 'Monday', start: '09:00', end: '10:20', course: 'Physics', room: 'A-103' }],
+  }])) };
+  const a = await app(data);
+  try {
+    const before = JSON.stringify(a.stored());
+    a.el('mobileMenuButton').click(); a.el('homeExportButton').click();
+    a.el('generateCodeButton').click();
+    for (let i = 0; i < 1000 && a.el('generateCodeButton').disabled; i++) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(a.el('generateCodeButton').disabled, false);
+    assert.equal(a.el('exportCodeStatus').dataset.tone, 'success');
+    assert.equal(Object.keys((await a.window.WhosFreeShareCode.decode(a.copied())).people).length, 300);
+    a.el('copyExportLinkButton').click(); await a.wait();
+    assert.equal(Object.keys((await a.window.WhosFreeShareCode.decode(a.copied())).people).length, 300);
+    assert.equal(JSON.stringify(a.stored()), before);
+  } finally { await a.window.happyDOM.abort(); }
+});

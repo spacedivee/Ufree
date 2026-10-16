@@ -32,7 +32,7 @@
   <link rel="icon" type="image/png" href="assets/icon-192.png" sizes="192x192">
   <link rel="icon" type="image/x-icon" href="favicon.ico" sizes="16x16 32x32 48x48">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" sizes="180x180">
-  <link rel="stylesheet" href="styles.css?v=90">
+  <link rel="stylesheet" href="styles.css?v=118">
 </head>
 <body>
   <div id="mobileNavBackdrop" class="mobile-nav-backdrop" aria-hidden="true" hidden></div>
@@ -55,7 +55,7 @@
         <button id="helpButton" class="secondary-button header-data-button" type="button" title="Help &amp; Tips" aria-label="Help &amp; Tips"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 8.5a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 16h.01"/></svg><span class="nav-button-label">Help &amp; Tips</span></button>
         <button id="settingsButton" class="secondary-button header-data-button nav-icon-button" type="button" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.28 5.44L10.52 5.06L10.51 2.62L13.49 2.62L13.48 5.06L14.72 5.44L14.72 5.44L15.87 6.05L17.58 4.31L19.69 6.42L17.95 8.13L18.56 9.28L18.56 9.28L18.94 10.52L21.38 10.51L21.38 13.49L18.94 13.48L18.56 14.72L18.56 14.72L17.95 15.87L19.69 17.58L17.58 19.69L15.87 17.95L14.72 18.56L14.72 18.56L13.48 18.94L13.49 21.38L10.51 21.38L10.52 18.94L9.28 18.56L9.28 18.56L8.13 17.95L6.42 19.69L4.31 17.58L6.05 15.87L5.44 14.72L5.44 14.72L5.06 13.48L2.62 13.49L2.62 10.51L5.06 10.52L5.44 9.28L5.44 9.28L6.05 8.13L4.31 6.42L6.42 4.31L8.13 6.05L9.28 5.44Z"/><circle cx="12" cy="12" r="3.2"/></svg><span class="nav-extra-label">Settings</span></button>
         <button id="homeExportButton" class="secondary-button header-data-button nav-icon-button" type="button" title="Export schedules" aria-label="Export schedules"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-8 4-4 4 4M5 13v7h14v-7"/></svg><span class="nav-extra-label">Export</span></button>
-        <button id="homeImportButton" class="secondary-button header-data-button nav-icon-button" type="button" title="Import schedule code" aria-label="Import schedule code"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 13v7h14v-7"/></svg><span class="nav-extra-label">Import code</span></button>
+        <button id="homeImportButton" class="secondary-button header-data-button nav-icon-button" type="button" title="Import" aria-label="Import"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 13v7h14v-7"/></svg><span class="nav-extra-label">Import</span></button>
         <button id="undoChangesButton" class="secondary-button header-data-button nav-icon-button" type="button" disabled title="No recent changes to undo" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h10a7 7 0 0 1 0 14M3 10l5-5M3 10l5 5" transform="translate(0 -3)"/></svg><span class="nav-extra-label">Undo</span></button>
         </nav>
       </div>
@@ -179,11 +179,20 @@
           <button id="importCodeButton" class="secondary-button" type="button">Import</button>
         </div>
         <div id="codeExportPanel" class="share-code-panel" hidden>
-          <details id="exportSelection" class="export-selection">
-            <summary><span>People to share</span><span id="exportSelectionSummary" class="export-selection-summary">Choose people</span></summary>
-            <label class="share-selection"><input id="selectAllSchedules" type="checkbox"><span>Everyone</span></label>
-            <div id="exportPeopleList" class="export-people-list"></div>
-          </details>
+          <p id="exportGroupSummary" class="share-code-note" hidden></p>
+          <div id="exportSelectionControls" class="export-selection-controls">
+            <div class="export-selection-toolbar">
+              <label class="export-person-search"><span class="visually-hidden">Search people to share</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input id="exportPeopleSearch" type="search" placeholder="Search people" autocomplete="off" aria-controls="exportPeopleList"></label>
+              <button id="exportGroupButton" class="secondary-button export-group-button" type="button" aria-label="Choose a group to share" aria-expanded="false" aria-controls="exportGroupPicker"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Group</span></button>
+            </div>
+            <div id="exportGroupPicker" class="export-group-picker" role="group" aria-label="Choose a group to share" hidden></div>
+            <details id="exportSelection" class="export-selection">
+              <summary><span id="exportSelectionToggleLabel">Show people</span><span id="exportSelectionSummary" class="export-selection-summary">Choose people</span><svg class="export-selection-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+              <label class="share-selection"><input id="selectAllSchedules" type="checkbox"><span>Everyone</span></label>
+              <div id="exportPeopleList" class="export-people-list"></div>
+              <p id="exportPeopleEmpty" class="share-code-note" role="status" hidden>No matching people.</p>
+            </details>
+          </div>
           <details class="export-encoding-note"><summary>Why does the text code use Chinese characters?</summary><p>Chinese (CJK) characters, plus some Korean symbols, encode the packed timetable in fewer characters than ordinary letters and numbers. Compression can shorten it further. These are data symbols, not translated text or encryption. Copy the whole code unchanged. Links and QR codes use a URL-safe encoding instead.</p></details>
           <div class="export-generation-actions">
             <div class="export-action-buttons">
@@ -211,17 +220,32 @@
             <label class="field-group share-link-field" hidden><span>Share link</span><textarea class="share-link-output" rows="2" readonly spellcheck="false" aria-label="Share link"></textarea></label>
             <div id="exportQr" class="share-qr" hidden></div>
             <p class="share-link-status parser-status" role="status" aria-live="polite"></p>
+            <progress id="multipleQrProgress" class="qr-generation-progress" max="100" value="0" aria-label="QR generation progress" hidden></progress>
+            <button id="multipleQrButton" class="primary-button" type="button" aria-controls="multipleQrCodes" aria-expanded="false" hidden>Multiple QR codes</button>
+            <div id="multipleQrCodes" class="multiple-qr-codes" tabindex="-1" aria-label="Independent schedule QR codes" hidden></div>
           </div>
           <div class="modal-actions">
           </div>
         </div>
         <div id="codeImportPanel" class="share-code-panel" hidden>
-          <h4>Import a friend’s schedules</h4>
+          <button id="importScheduleImageButton" class="primary-button action-icon-button wide-action" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></svg><span>Import schedule image</span></button>
+          <div id="importImageStatus" class="parser-status" role="status" aria-live="polite"></div>
           <p id="importCodeHelp">Paste a code or share link. Duplicates are skipped; conflicting schedules need your choice.</p>
           <label id="importCodeField" class="field-group share-code-field"><span>Code or link from your friend</span><textarea id="importCodeInput" rows="5" maxlength="1800000" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></label>
           <div id="sharedImportPreview" hidden>
             <p>Choose the schedules to add. Nothing is saved until you confirm.</p>
             <div id="sharedImportPeople" class="export-people-list"></div>
+          </div>
+          <div id="sharedGroupImport" hidden>
+            <h3>You were shared a group</h3>
+            <p id="sharedGroupSummary"></p>
+            <p>Keep its members in a group, or add everybody individually. Existing schedules are kept; matching people can join the group.</p>
+            <label class="field-group group-name-field"><span>Group name</span><input id="sharedGroupName" type="text" maxlength="60" autocomplete="off"></label>
+            <p id="sharedGroupError" class="parser-status" data-tone="error" role="alert"></p>
+            <div class="modal-actions">
+              <button id="addSharedGroupButton" class="primary-button" type="button">Add to group</button>
+              <button id="addSharedPeopleButton" class="secondary-button" type="button">Add everybody individually</button>
+            </div>
           </div>
           <div id="importCodeStatus" class="parser-status" role="status" aria-live="polite"></div>
           <div id="codeConflictPrompt" class="share-code-panel" role="group" aria-labelledby="codeConflictMessage" hidden>
@@ -364,7 +388,7 @@
         </div>
       </details>
       <footer class="creator-credit settings-credit" aria-label="App credits">
-        <p class="credit-team">App by David Dajbog and Hui En Quan.</p>
+        <p class="credit-team">App by David Dajbog and Hui En Qian.</p>
         <p class="credit-inspiration">Inspiration from Xander Vatch.</p>
       </footer>
     </section>
@@ -424,10 +448,10 @@
         <details class="help-topic"><summary>Add and edit schedules</summary><p>Open Schedules to import an Omnivox screenshot or create a timetable manually. Picture recognition runs on your device. Review the detected names, days, times, rooms and classes before saving, and correct any uncertain results. The stored-people list starts collapsed; choose Show to edit a saved timetable or its semester. PDF and JSON imports are also available.</p></details>
         <details class="help-topic"><summary>Find who is free</summary><p>Current time follows the clock. Turn it off to choose a day and time, including weekends. All shows everyone; Free shows available people. Class Soon means someone has a short gap before their next class. Use the magnifying glass beside GROUP to search names and nicknames; the search field opens below the buttons. Search respects All/Free and Groups. Leaving the search field closes it and clears the filter; press the magnifying glass to reopen it. The clear button keeps the field open. Select a person for their next class and today's timetable, then use Full schedule to see the week.</p></details>
         <details class="help-topic"><summary>People and individual actions</summary><p>Select a person's name to reveal Full schedule, +, the red trash icon and Share. On a small screen, the page scrolls to these details. + adds them to an existing group. Trash deletes their schedule from this device after confirmation. Share exports only that person's schedule as a URL, QR code or text code.</p></details>
-        <details class="help-topic"><summary>Groups and shared availability</summary><p>Turn on GROUP and use the group management icon beside search to create or edit groups. Choose Edit beside a group to rename it and remove members with the red trash icons. A person can belong to several groups. Hide or show a group's members, and open its … menu to move the group to the top or view weekly availability. Save group applies the changes; Cancel discards them. Removing a member preserves their schedule and other group memberships. Group preferences also let you control whether ungrouped people appear.</p></details>
-        <details class="help-topic"><summary>Share and import</summary><p>The export icon opens quick sharing with Everyone selected. Expand People to share to choose fewer people. Export Code creates text you can copy; Export QR displays a scannable code; Copy Link creates a URL. Times, class names and rooms are included by default. Use … to include teachers, course codes, semesters and other saved details. Open a received link, scan a QR with your phone camera, or paste a text code in Schedules → Import. Review the people before confirming; nothing is saved automatically. Anyone with your export can read the selected schedule details.</p></details>
+        <details class="help-topic"><summary>Groups and shared availability</summary><p>Turn on GROUP and use the group management icon beside search to create or edit groups. Choose Edit beside a group to rename it and remove members with the red trash icons. A person can belong to several groups. Hide or show a group's members, and open its … menu to move the group to the top, view weekly availability, or Share Group. Share Group offers Code, QR and Link for all its members. The receiver can keep a named group or add everybody individually. Save group applies the changes; Cancel discards them. Removing a member preserves their schedule and other group memberships. Group preferences also let you control whether ungrouped people appear.</p></details>
+        <details class="help-topic"><summary>Share and import</summary><p>The export icon opens quick sharing with Everyone selected. Search people or expand Show people to choose who to share. The Group button shares a saved group with its name and members. Export Code creates text you can copy; Export QR displays a scannable code; Copy Link creates a URL. Times, class names and rooms are included by default. Use … to include teachers, course codes, semesters and other saved details. Open a received link, scan a QR with your phone camera, or paste a text code in Schedules → Import. Opening an ordinary link or scanning an ordinary QR adds people automatically and shows how many were added or skipped. Group shares first ask whether to keep a named group or add everybody individually. Existing schedules are kept. Pasting a link or code in Import keeps the manual review and conflict choices. Anyone with your export can read the selected schedule details.</p></details>
         <details class="help-topic"><summary>Reorder, pin and undo</summary><p>Drag a person to reorder the list on desktop, or hold and move their card on touch screens. With the person's name focused, Alt + Up or Down moves them using the keyboard. Groups remember their own order. Pin people in Settings to keep them above unpinned people. The back arrow undoes recent schedule and ordering changes during the current page session.</p></details>
-        <details class="help-topic"><summary>Settings and notifications</summary><p>Open the cog for nicknames, pinned people, notification preferences and appearance. Choose a light or dark theme and an accent colour. Notifications need your browser's permission; keep UFree open for its time checks. Nicknames, groups and preferences stay on this device and are not included in schedule exports.</p></details>
+        <details class="help-topic"><summary>Settings and notifications</summary><p>Open the cog for nicknames, pinned people, notification preferences and appearance. Choose a light or dark theme and an accent colour. Notifications need your browser's permission; keep UFree open for its time checks. Nicknames and personal preferences stay on this device. Group identity is included only when you choose Share Group.</p></details>
         <details class="help-topic"><summary>Keep a backup</summary><p>Schedules are saved in this browser on this device, with no automatic sync between devices. Export a code or a JSON backup from Schedules before clearing website data, switching browsers or changing devices. Import the backup to restore your timetables. Undo does not survive closing or reloading the page.</p></details>
       </div>
       <section class="help-privacy" aria-labelledby="privacyNoticeTitle">
@@ -438,7 +462,7 @@
         <p><strong>Hosting and sharing.</strong> The website host and asset providers receive normal network requests, which can include your IP address and browser information. Only exports you choose to share reveal schedule data to recipients. Sending feedback by email shares what you include in that message.</p>
       </section>
       <footer class="creator-credit settings-credit" aria-label="App credits">
-        <p class="credit-team">App by David Dajbog and Hui En Quan.</p>
+        <p class="credit-team">App by David Dajbog and Hui En Qian.</p>
         <p class="credit-inspiration">Inspiration from Xander Vatch.</p>
       </footer>
       <details id="iosShortcutGuide" class="help-topic ios-shortcut-guide">
@@ -462,9 +486,9 @@
       <details class="export-encoding-note"><summary>Why does the text code use Chinese characters?</summary><p>Chinese (CJK) characters, plus some Korean symbols, encode the packed timetable in fewer characters than ordinary letters and numbers. Compression can shorten it further. These are data symbols, not translated text or encryption. Copy the whole code unchanged. Links and QR codes use a URL-safe encoding instead.</p></details>
       <div class="export-generation-actions">
         <div class="export-action-buttons">
-          <button id="personQuickUrlButton" class="secondary-button action-icon-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-8 4-4 4 4M5 13v7h14v-7"/></svg><span>URL</span></button>
-          <button id="personQuickQrButton" class="secondary-button action-icon-button" type="button" aria-expanded="false" aria-controls="personQuickQr"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-8 4-4 4 4M5 13v7h14v-7"/></svg><span>QR Code</span></button>
           <button id="personQuickCodeButton" class="secondary-button action-icon-button" type="button" title="Generate and copy text code"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-8 4-4 4 4M5 13v7h14v-7"/></svg><span>Text Code</span></button>
+          <button id="personQuickQrButton" class="secondary-button action-icon-button" type="button" aria-expanded="false" aria-controls="personQuickQr"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-8 4-4 4 4M5 13v7h14v-7"/></svg><span>QR Code</span></button>
+          <button id="personQuickUrlButton" class="secondary-button action-icon-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-8 4-4 4 4M5 13v7h14v-7"/></svg><span>URL</span></button>
         </div>
         <details id="personQuickExportFields" class="export-field-options">
           <summary aria-label="Choose export details" title="Export details">…</summary>
@@ -538,20 +562,22 @@
       const loading = document.getElementById("importProgressOverlay");
       document.getElementById("importProgressTitle").textContent = "Opening shared schedules";
       document.getElementById("importProgressMessage").textContent = "Loading the app…";
-      loading.querySelector(".import-progress-note").textContent = "Nothing is added until you confirm.";
+      loading.querySelector(".import-progress-note").textContent = "Shared schedules open on this device. Group shares let you choose how to add their members.";
       loading.setAttribute("aria-busy", "true");
       loading.hidden = false;
       document.documentElement.classList.add("shared-link-starting");
     }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=90" defer></script>
-  <script src="schedule-image-parser.js?v=92" defer></script>
+  <script src="schedule-parser.js?v=112" defer></script>
+  <script src="schedule-dated-image-parser.js?v=121" defer></script>
+  <script src="schedule-image-parser.js?v=110" defer></script>
   <script src="schedule-availability.js?v=90" defer></script>
-  <script src="schedule-share-code.js?v=90" defer></script>
+  <script src="schedule-share-code.js?v=120" defer></script>
   <script src="assets/qr/qrcodegen.js?v=90" defer></script>
   <script src="schedule-groups.js?v=90" defer></script>
-  <script src="app.js?v=96" defer></script>
+  <script src="schedule-qr-batches.js?v=119" defer></script>
+  <script src="app.js?v=121" defer></script>
 </body>
 </html>
 
