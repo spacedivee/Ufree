@@ -602,7 +602,19 @@ window.UFreeFrench = {
     "Free:": "Libres :",
     "Busy:": "Occupés :",
     "Local storage could not be read. Reload UFree when storage is available; your saved copy has not been replaced.": "Impossible de lire le stockage local. Rechargez UFree lorsque le stockage sera accessible; votre copie enregistrée n’a pas été remplacée.",
-    "The saved schedules could not be fully removed. Nothing was removed from this view. Reload and try again when storage is available.": "Impossible de supprimer complètement les horaires enregistrés. Rien n’a été retiré de cet affichage. Rechargez l’application et réessayez lorsque le stockage sera accessible."
+    "The saved schedules could not be fully removed. Nothing was removed from this view. Reload and try again when storage is available.": "Impossible de supprimer complètement les horaires enregistrés. Rien n’a été retiré de cet affichage. Rechargez l’application et réessayez lorsque le stockage sera accessible.",
+    "Try again": "Réessayer",
+    "How your screenshot should look": "À quoi doit ressembler votre capture d’écran",
+    "Keep every weekday heading, the full time column, and the entire timetable visible.": "Gardez visibles tous les jours, la colonne complète des heures et l’horaire en entier.",
+    "Use a clear, upright screenshot. Do not cut off classes or times. Your courses and times can be different from this example.": "Utilisez une capture d’écran nette et bien orientée. Ne coupez aucun cours ni aucune heure. Vos cours et vos heures peuvent être différents de cet exemple.",
+    "Example of a clear weekly timetable with all weekday headings, times, and class blocks visible.": "Exemple d’un horaire hebdomadaire net où tous les jours, les heures et les blocs de cours sont visibles.",
+    "Example screenshot: include the complete timetable.": "Exemple de capture d’écran : incluez l’horaire en entier.",
+    "Before your first screenshot": "Avant votre première capture d’écran",
+    "Loading the screenshot example…": "Chargement de l’exemple de capture d’écran…",
+    "Choose screenshot": "Choisir une capture d’écran",
+    "Keep the example visible to continue.": "Gardez l’exemple visible pour continuer.",
+    "Open the example to continue.": "Ouvrez l’exemple pour continuer.",
+    "The example could not load. Connect to the internet and choose Try again.": "Impossible de charger l’exemple. Connectez-vous à Internet, puis choisissez Réessayer."
   },
   "templates": [
     {
