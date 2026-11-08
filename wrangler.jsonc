@@ -1,0 +1,43 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "youfreetest",
+  "main": "backend/entry.mjs",
+  "compatibility_date": "2026-10-20",
+  "workers_dev": true,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ufree-test-db",
+      "database_id": "dff58bbe-1cc3-4850-8a58-4532fc9aed4b",
+      "migrations_dir": "backend/migrations"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "17 3 * * *"
+    ]
+  },
+  "build": {
+    "command": "node backend/prepare-deploy.mjs"
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PASSWORD_CRYPTO",
+        "class_name": "PasswordCrypto"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "password-crypto-v1",
+      "new_sqlite_classes": [
+        "PasswordCrypto"
+      ]
+    }
+  ]
+}

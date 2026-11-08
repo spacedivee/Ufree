@@ -690,6 +690,9 @@ input[type="time"]:disabled {
 }
 
 .toast {
+  inset: auto;
+  margin: 0;
+  border: 0;
   position: fixed;
   left: 50%;
   bottom: max(22px, env(safe-area-inset-bottom));
@@ -3026,3 +3029,108 @@ html[lang="fr"] .nav-extra-label, html[lang="fr"] .nav-button-label { min-width:
 }
 
 .people-list-import[hidden] { display: none; }
+
+.account-nav-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; width: 100%; }
+.home-header-controls .account-nav-footer .language-toggle-button { margin-top: 0; }
+#accountMenuButton { margin-left: auto; max-width: 190px; font-size: .9rem; }
+.account-dialog { color: var(--text); background: var(--panel, #232428); border: 1px solid var(--border, #555); border-radius: 18px; width: min(560px, calc(100vw - 32px)); max-height: 88dvh; overflow: auto; padding: 22px; }
+.account-dialog::backdrop { background: rgb(0 0 0 / .65); }
+.account-dialog label { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.account-dialog input:not([type=checkbox]), .account-dialog select, .account-dialog textarea { width: 100%; max-width: 100%; min-height: 44px; color: inherit; background: var(--bg); border: 1px solid var(--border, #555); border-radius: 8px; padding: 10px; }
+.account-dialog button { margin: 5px; min-height: 44px; }
+.account-dialog p { white-space: pre-line; overflow-wrap: anywhere; }
+.account-actions { display: flex; flex-wrap: wrap; }
+.guest-home-limit-card { background: var(--card); border-radius: 8px; padding: 16px; margin: 9px 0; }
+.guest-home-limit-card h3 { margin: 0 0 8px; font-size: 1rem; }
+.guest-home-limit-card p { margin: 0 0 12px; }
+.guest-home-limit-card p + p { color: var(--muted); font-size: .875rem; }
+.guest-home-limit-card .account-actions { gap: 8px; }
+.account-settings-shortcuts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.account-settings-shortcuts:has(button:not([hidden])) { margin-bottom: 8px; }
+.account-settings-shortcuts:not(:has(button:not([hidden]))) { display: none; }
+.settings-reload-button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+.settings-reload-button[hidden] { display: none; }
+.settings-reload-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.settings-reload-button.is-loading svg { animation: settings-reload-spin 1s linear infinite; }
+@keyframes settings-reload-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .settings-reload-button.is-loading svg { animation: none; } }
+.account-collection-label { margin: 0 0 12px; color: var(--muted); }
+
+.follow-results { display: grid; gap: 12px; margin-top: 16px; }
+.follow-result { border: 1px solid var(--border, #555); border-radius: 12px; padding: 12px; }
+.follow-result p { margin: 6px 0 10px; }
+.live-personal-label { display: block; font-size: .75rem; color: var(--muted); }
+.friends-list { gap: 0; }
+.friend-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
+.friend-identity { flex: 1; min-width: 0; }
+.friend-name { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; overflow-wrap: anywhere; }
+.friend-note { color: var(--muted); font-size: .85em; font-weight: 400; white-space: normal; overflow-wrap: anywhere; }
+.person-name .friend-note { margin-left: .4em; }
+.friend-identity p { font-size: .8rem; color: var(--muted); margin: 3px 0 0; }
+.friend-menu { position: relative; flex: 0 0 auto; }
+.cloud-sharing-heading { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.account-dialog .modal-header { gap: 8px; align-items: center; padding-top: 4px; padding-bottom: 12px; }
+.account-dialog .modal-header h2 { flex: 1; min-width: 0; margin: 0; }
+.account-dialog .modal-header > button { margin: 0; flex: 0 0 auto; }
+.cloud-sharing-heading { flex: 0 0 auto; }
+.cloud-sharing-heading .friend-menu-actions { max-height: 55dvh; overflow-y: auto; }
+.cloud-sharing-heading .friend-menu-actions p { margin: 10px; font-size: .8rem; }
+.account-dialog [hidden] { display: none !important; }
+.account-dialog .export-person-search { margin: 0; flex-wrap: nowrap; justify-content: flex-start; }
+.account-dialog .export-person-search input { flex: 1; min-width: 0; min-height: 42px; padding: 8px 0; border: 0; border-radius: 0; background: transparent; }
+.account-dialog .export-group-button { margin: 0; min-height: 42px; }
+.account-dialog .export-selection .share-selection { margin: 0; flex-wrap: nowrap; justify-content: flex-start; }
+.friend-menu summary { display: flex; align-items: center; justify-content: center; list-style: none; cursor: pointer; min-width: 44px; min-height: 44px; border-radius: 8px; font-size: 1.7rem; }
+.friend-menu summary::-webkit-details-marker { display: none; }
+.friend-menu summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.friend-menu[open] { z-index: 2; }
+.friend-menu-actions { position: absolute; right: 0; top: 100%; display: grid; width: min(240px, 65vw); padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel, #232428); box-shadow: 0 6px 20px rgb(0 0 0 / .25); }
+.friend-menu-actions button { text-align: left; margin: 2px; }
+.friends-list:has(.friend-menu[open]) { padding-bottom: 170px; }
+
+.site-legal-footer { text-align: center; padding: 1rem .75rem; color: var(--muted); }
+.site-legal-links { font-size: .8rem; line-height: 1.7; }
+.site-legal-links a { color: inherit; text-decoration: underline; text-underline-offset: .2em; }
+
+.school-picker { margin: 16px 0; }
+.school-picker .school-picker-label { margin-bottom: 8px; }
+.school-picker details { border: 1px solid var(--border, #555); border-radius: 10px; }
+.school-picker summary { cursor: pointer; min-height: 44px; padding: 12px; overflow-wrap: anywhere; }
+.school-picker summary:focus-visible, .school-results button:focus-visible { outline: 2px solid var(--accent, #7daaff); outline-offset: 2px; }
+.school-picker-content { padding: 0 12px 12px; }
+.school-search-row { display: flex; gap: 8px; align-items: center; }
+.school-search-row input { flex: 1; min-width: 0; }
+.school-search-row button { flex: 0 0 auto; }
+.school-picker .school-result-count { font-size: .85rem; margin: 8px 0; }
+.school-results { list-style: none; margin: 0; padding: 0; max-height: min(18rem, 40dvh); overflow-y: auto; overscroll-behavior: contain; }
+.school-results li { margin: 0; padding: 0; }
+.school-results button { display: flex; flex-direction: column; gap: 4px; width: calc(100% - 10px); text-align: left; padding: 10px; color: inherit; background: var(--bg); border: 1px solid var(--border, #555); border-radius: 8px; overflow-wrap: anywhere; }
+.school-results button[aria-pressed=true] { border-color: var(--accent, #7daaff); box-shadow: inset 3px 0 var(--accent, #7daaff); }
+.school-results small { opacity: .75; }
+
+/* Separate the two independent cloud-sharing methods without competing with actions. */
+.account-dialog .cloud-sharing-alternative {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin: 22px 0;
+  color: var(--muted);
+  font-size: .8rem;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+}
+.account-dialog .cloud-sharing-alternative::before,
+.account-dialog .cloud-sharing-alternative::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Keep every home-card status flush with the same right edge, including wrapped labels. */
+.person-card .status-badge {
+  justify-self: end;
+  text-align: right;
+}

@@ -28,6 +28,45 @@ const SYNC_URL = 'https://youfree.ca';
   const WORK_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
   const ALL_DAYS = [...WORK_DAYS, "Saturday", "Sunday"];
 
+  // Main-page display limit while signed out. Change this number to 5, 15, etc.
+  // The complete collection remains stored and accessible in Schedules.
+  const GUEST_HOME_SCHEDULE_LIMIT = 10;
+
+  function guestHomeLimited() {
+    // Do not restrict deployments where account creation is unavailable.
+    return Boolean(window.UFreeAccounts?.uiEnabled !== false && window.UFreeAccounts && !window.UFreeAccounts.active());
+  }
+
+  function homePeople() {
+    const names = orderScopeMembers("main");
+    return guestHomeLimited() ? names.slice(0, GUEST_HOME_SCHEDULE_LIMIT) : names;
+  }
+
+  function appendGuestHomeNotice() {
+    if (!guestHomeLimited() || Object.keys(peopleMap()).length < GUEST_HOME_SCHEDULE_LIMIT) return;
+    const card = document.createElement("div");
+    card.className = "guest-home-limit-card";
+    card.setAttribute("role", "listitem");
+    const title = document.createElement("h3");
+    setUiText(title, "Maximum limit of schedules reached.");
+    const message = document.createElement("p");
+    setUiText(message, "Create an account to get unlimited slots.");
+    const note = document.createElement("p");
+    setUiText(note, "All your schedules are still saved on this device. View or delete them in Schedules.");
+    const actions = document.createElement("div");
+    actions.className = "account-actions";
+    for (const [label, signup] of [["Create an account", true], ["Sign in", false]]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary-button";
+      setUiText(button, label);
+      button.addEventListener("click", () => window.UFreeAccounts.openAuth(signup));
+      actions.append(button);
+    }
+    card.append(title, message, note, actions);
+    els.peopleList.append(card);
+  }
+
   const state = {
     data: { people: {} },
     hasData: false,
@@ -93,14 +132,14 @@ const SYNC_URL = 'https://youfree.ca';
   const LOCAL_STORE_NAME = "app";
   const LOCAL_SCHEDULE_KEY = "schedules";
   const LOCAL_STORAGE_FALLBACK_KEY = "whos-free-local-schedules";
-  const SCHEDULE_HISTORY_KEY = "ufree-has-had-schedules-v1";
-  const NOTIFICATION_SETTINGS_KEY = "whos-free-notification-settings-v1";
-  const NOTIFICATION_HISTORY_KEY = "whos-free-notification-history-v1";
-  const PEOPLE_PREFERENCES_KEY = "whos-free-people-preferences-v1";
-  const VIEW_PREFERENCE_KEY = "whos-free-view-mode-v1";
-  const PERSON_ORDER_KEY = "whos-free-person-order-v1";
-  const GROUP_PREFERENCES_KEY = "whos-free-groups-v1";
-  const ACCENT_THEME_KEY = "whos-free-accent-theme-v1";
+  const SCHEDULE_HISTORY_KEY = (window.UFreeAccounts?.prefix() || "") + "ufree-has-had-schedules-v1";
+  const NOTIFICATION_SETTINGS_KEY = (window.UFreeAccounts?.prefix() || "") + "whos-free-notification-settings-v1";
+  const NOTIFICATION_HISTORY_KEY = (window.UFreeAccounts?.prefix() || "") + "whos-free-notification-history-v1";
+  const PEOPLE_PREFERENCES_KEY = (window.UFreeAccounts?.prefix() || "") + "whos-free-people-preferences-v1";
+  const VIEW_PREFERENCE_KEY = (window.UFreeAccounts?.prefix() || "") + "whos-free-view-mode-v1";
+  const PERSON_ORDER_KEY = (window.UFreeAccounts?.prefix() || "") + "whos-free-person-order-v1";
+  const GROUP_PREFERENCES_KEY = (window.UFreeAccounts?.prefix() || "") + "whos-free-groups-v1";
+  const ACCENT_THEME_KEY = (window.UFreeAccounts?.prefix() || "") + "whos-free-accent-theme-v1";
   // Cache Storage is a best-effort backup within this origin/storage partition.
   // iOS isolates Safari and Home Screen website data; this cannot bridge that boundary.
   const CACHE_SYNC_STORAGE_KEYS = [
@@ -129,6 +168,7 @@ const SYNC_URL = 'https://youfree.ca';
   }
 
   function backupStateToSharedCache() {
+    if (window.UFreeAccounts?.active()) window.UFreeAccounts.preferences();
     if (!cacheSyncReady) return;
     try {
       const storage = {};
@@ -370,7 +410,7 @@ const SYNC_URL = 'https://youfree.ca';
 
   function loadTheme() {
     try {
-      const saved = localStorage.getItem("whos-free-theme");
+      const saved = localStorage.getItem((window.UFreeAccounts?.prefix() || "") + "whos-free-theme");
       return saved === "light" || saved === "dark" ? saved : "dark";
     } catch {
       return "dark";
@@ -379,7 +419,7 @@ const SYNC_URL = 'https://youfree.ca';
 
   function saveTheme(theme) {
     try {
-      localStorage.setItem("whos-free-theme", theme); backupStateToSharedCache();
+      localStorage.setItem((window.UFreeAccounts?.prefix() || "") + "whos-free-theme", theme); backupStateToSharedCache();
     } catch {
       // Theme persistence is optional.
     }
@@ -929,7 +969,7 @@ const SYNC_URL = 'https://youfree.ca';
     requestAnimationFrame(() => {
       animateModalOpen(els.settingsModal, els.settingsModal.querySelector(".settings-modal"));
       animateSettingsContent();
-      els.closeSettingsModal.focus();
+      document.activeElement?.blur();
     });
   }
 
@@ -1214,6 +1254,7 @@ const SYNC_URL = 'https://youfree.ca';
   }
 
   function displayName(name) {
+    if (window.UFreeAccounts?.isLive(name)) return name;
     const nickname = String(state.nicknames[name] || "").trim();
     return nickname || name;
   }
@@ -2111,6 +2152,14 @@ const SYNC_URL = 'https://youfree.ca';
     return window.WhosFreeAvailability.isFree(classesForDay(name, day), minute);
   }
 
+  function freeStatusLabel(name, day, minute) {
+    const classes = classesForDay(name, day).filter(c => toMinutes(c.end) > toMinutes(c.start));
+    if (!classes.length) return "FREE";
+    if (minute < Math.min(...classes.map(c => toMinutes(c.start)))) return "Before School";
+    if (minute >= Math.max(...classes.map(c => toMinutes(c.end)))) return "After School";
+    return "FREE";
+  }
+
   function previousClasses(name, day, minute) {
     if (!ALL_DAYS.includes(day)) return [];
     return classesForDay(name, day).filter(c => toMinutes(c.end) <= minute);
@@ -2222,7 +2271,7 @@ const SYNC_URL = 'https://youfree.ca';
 
   function visiblePeople(day, minute) {
     const terms = searchText(state.peopleSearchQuery.trim()).split(/\s+/).filter(Boolean);
-    const people = Object.keys(peopleMap()).filter(name => terms.every(term => searchText(`${name} ${displayName(name)}`).includes(term))).sort(comparePeopleNames);
+    const people = homePeople().filter(name => terms.every(term => searchText(`${name} ${displayName(name)}`).includes(term))).sort(comparePeopleNames);
     const free = people.filter(name => isFree(name, day, minute)).sort(comparePeopleNames);
     const freeSet = new Set(free);
     const busy = people.filter(name => !freeSet.has(name)).sort(comparePeopleNames);
@@ -2242,7 +2291,14 @@ const SYNC_URL = 'https://youfree.ca';
       return;
     }
     setUiText(els.toast, message);
+    // Native modal dialogs sit above every z-index. Promote notifications to
+    // the top layer too; keep the live region inside the active dialog.
+    const dialogs = [...document.querySelectorAll("dialog[open]")];
+    const parent = dialogs.at(-1) || document.body;
+    els.toast.hidePopover?.();
+    parent.append(els.toast);
     els.toast.hidden = false;
+    els.toast.showPopover?.();
     if (canAnimate()) {
       window.gsap.killTweensOf(els.toast);
       window.gsap.fromTo(
@@ -2261,11 +2317,13 @@ const SYNC_URL = 'https://youfree.ca';
           ease: "power1.in",
           onComplete: () => {
             els.toast.hidden = true;
+            els.toast.hidePopover?.();
             window.gsap.set(els.toast, { clearProps: "opacity,transform" });
           },
         });
       } else {
         els.toast.hidden = true;
+        els.toast.hidePopover?.();
       }
     }, 2600);
   }
@@ -2595,6 +2653,7 @@ const SYNC_URL = 'https://youfree.ca';
   }
 
   function openManualSchedule(name = "", person = { source_file: "manual", classes: [] }) {
+    if (window.UFreeAccounts?.isLive(name)) { showToast("Live personal schedules are read-only. Manage friends in Account."); return; }
     if (!schedulesWritable() || state.isParsing || state.pendingImage) return;
     state.pendingImage = { name, person, editingName: name || null };
     els.imageReviewName.value = name;
@@ -2704,6 +2763,7 @@ const SYNC_URL = 'https://youfree.ca';
     }
     const editingName = state.pendingImage.editingName;
     const renamed = editingName && editingName !== name;
+    if (window.UFreeAccounts?.isLive(name) || window.UFreeAccounts?.isLive(editingName)) { setUiText(els.imageReviewError,"Live personal schedules are read-only. Save a separate copy instead."); return; }
     const replacement = Object.prototype.hasOwnProperty.call(workingData.people, name);
     // Define an own property safely even if a person's name is __proto__.
     Object.defineProperty(workingData.people, name, { value: { ...state.pendingImage.person, source_file: state.pendingImage.person.source_file, semester, classes }, writable: true, enumerable: true, configurable: true });
@@ -2750,6 +2810,7 @@ const SYNC_URL = 'https://youfree.ca';
       }
       state.selectedPerson = name;
       const warning = await persistCurrentDatabase("Local schedule collection");
+      if (renamed && !warning) window.UFreeAccounts?.renamed(editingName, name);
       if (firstCreation && !warning) welcomeName = name;
       const changed = rememberScheduleChange(before, `${editingName ? "Edited" : replacement ? "Replaced" : "Added"} ${name}'s schedule`);
       clearImageReview();
@@ -2940,7 +3001,21 @@ const SYNC_URL = 'https://youfree.ca';
   let scheduleStorageRevision = 0;
   const recordRevision = record => Number.isSafeInteger(record?.storageRevision) && record.storageRevision > 0 ? record.storageRevision : 0;
 
-  async function readLocalScheduleRecord() {
+  let deviceOperations = Promise.resolve();
+  function onDevice(work) {
+    const task = deviceOperations.then(work);
+    deviceOperations = task.catch(() => {});
+    return task;
+  }
+  function readLocalScheduleRecord() {
+    return onDevice(async () => {
+      const record = await readLegacyLocalScheduleRecord();
+      if (record?.data) validateData(record.data);
+      return window.UFreeAccounts ? window.UFreeAccounts.restoreDevice(record, writeDeviceScheduleRecord) : record;
+    });
+  }
+
+  async function readLegacyLocalScheduleRecord() {
     let primary = null, fallback = null, primaryError = null, fallbackError = null;
     if ("indexedDB" in window) {
       try { primary = await idbGet(LOCAL_SCHEDULE_KEY); }
@@ -2965,7 +3040,14 @@ const SYNC_URL = 'https://youfree.ca';
     return null;
   }
 
-  async function saveLocalScheduleRecord(record) {
+  function saveLocalScheduleRecord(record) {
+    const snapshot = JSON.parse(JSON.stringify(record));
+    return onDevice(() => window.UFreeAccounts?.active()
+      ? window.UFreeAccounts.save(snapshot, writeDeviceScheduleRecord)
+      : writeDeviceScheduleRecord(snapshot));
+  }
+
+  async function writeDeviceScheduleRecord(record) {
     const saved = { ...record, storageRevision: Math.max(Date.now(), scheduleStorageRevision + 1) };
     scheduleStorageRevision = saved.storageRevision;
     try {
@@ -2991,6 +3073,7 @@ const SYNC_URL = 'https://youfree.ca';
   }
 
   async function deleteLocalScheduleRecord() {
+    if (window.UFreeAccounts?.active()) return window.UFreeAccounts.clear(writeDeviceScheduleRecord);
     let primaryRemoved = !("indexedDB" in window), fallbackRemoved = false;
     if ("indexedDB" in window) {
       try { await idbDelete(LOCAL_SCHEDULE_KEY); primaryRemoved = true; }
@@ -3073,11 +3156,13 @@ const SYNC_URL = 'https://youfree.ca';
   async function persistCurrentDatabase(label = "Local schedule collection") {
     validateData(state.data);
     cleanGroupPreferences();
-    const meta = makeCollectionMeta(state.data, label);
+    const meta = { ...state.scheduleMeta, ...makeCollectionMeta(state.data, label) };
     const record = { data: state.data, meta };
     let storageWarning = null;
     try {
-      await saveLocalScheduleRecord(record);
+      const saved = await saveLocalScheduleRecord(record);
+      if (saved.cloudLimitReached) storageWarning = "Cloud limit reached: extra schedules are saved on this device only, not in your account's cloud storage.";
+      if (window.UFreeAccounts?.active()) { state.data = saved.data; Object.assign(meta, saved.meta); }
       await requestPersistentStorage();
       if (Object.keys(peopleMap()).length) rememberScheduleHistory();
     } catch (error) {
@@ -3242,6 +3327,66 @@ const SYNC_URL = 'https://youfree.ca';
     if (element === els.importCodeStatus) updateImportProgress(message);
   }
 
+  function cloudExportPicker(parent) {
+    const root = els.exportSelectionControls.cloneNode(true);
+    const get = id => root.querySelector('[id="' + id + '"]');
+    const search = get("exportPeopleSearch"), list = get("exportPeopleList"), details = get("exportSelection"),
+      summary = get("exportSelectionSummary"), toggle = get("exportSelectionToggleLabel"),
+      all = get("selectAllSchedules"), empty = get("exportPeopleEmpty"), groups = get("exportGroupPicker"), groupButton = get("exportGroupButton");
+    for (const node of [root, ...root.querySelectorAll("[id]")]) if (node.id) node.id = "cloud-" + node.id;
+    for (const node of root.querySelectorAll("[aria-controls]")) node.setAttribute("aria-controls", "cloud-" + node.getAttribute("aria-controls"));
+    root.hidden = false; details.hidden = false; details.open = false; groups.hidden = true; search.value = "";
+    groupButton.classList.remove("has-group"); groupButton.setAttribute("aria-expanded", "false");
+    setUiAttribute(groupButton,"aria-label","Choose a group to share");setUiAttribute(groups,"aria-label","Choose a group to share");
+    setUiText(groupButton.querySelector("span"), "Group");
+    setUiText(root.querySelector(".export-person-search span"), "Search people to share");
+    setUiAttribute(search,"placeholder","Search people");
+    setUiText(all.nextElementSibling,"Everyone"); setUiText(empty,"No matching people.");
+    list.replaceChildren();
+    const inputs = [];
+    const selected = () => inputs.filter(input => input.checked).map(input => input.dataset.person);
+    const update = () => {
+      const terms = searchText(search.value.trim()).split(/\s+/).filter(Boolean);
+      let visible = 0;
+      for (const input of inputs) {
+        const name = input.dataset.person;
+        const matches = terms.every(term => searchText(`${name} ${displayName(name)}`).includes(term));
+        input.closest("label").hidden = !matches; if (matches) visible++;
+      }
+      const count = selected().length;
+      all.checked = count > 0 && count === inputs.length; all.indeterminate = count > 0 && count < inputs.length;
+      empty.hidden = visible > 0;
+      setUiText(summary, terms.length ? `${visible} matching · ${count} selected` : count === inputs.length && count > 0 ? `Everyone · ${count}` : `${count} of ${inputs.length} selected`);
+      setUiText(toggle,details.open ? "Hide people" : "Show people");
+    };
+    for (const name of Object.keys(peopleMap()).sort(comparePeopleNames)) {
+      const label = document.createElement("label"); label.className = "share-selection";
+      const input = document.createElement("input"); input.type = "checkbox"; input.checked = true; input.dataset.person = name;
+      const caption = document.createElement("span"); setUiText(caption,displayName(name) === name ? name : `${displayName(name)} (${name})`,false);
+      label.append(input,caption);
+      if (window.UFreeAccounts?.localOnly(name)) { const badge=document.createElement("small");setUiText(badge,"Device only");label.append(badge); }
+      list.append(label); inputs.push(input); input.addEventListener("change",update);
+    }
+    search.addEventListener("input",()=>{details.open = true; update();});
+    groups.addEventListener("keydown",event=>{if(event.key==="Escape"){event.preventDefault();event.stopPropagation();groups.hidden=true;groupButton.setAttribute("aria-expanded","false");groupButton.focus();}});
+    details.addEventListener("toggle",update);
+    all.addEventListener("change",()=>{for(const input of inputs) input.checked = all.checked; update();});
+    groupButton.addEventListener("click",()=>{
+      groups.hidden = !groups.hidden; groupButton.setAttribute("aria-expanded",String(!groups.hidden));
+      if(groups.hidden)return;
+      details.open = false; groups.replaceChildren();
+      for(const group of [null,...state.groups]){
+        const members = group ? groupMembers(group) : Object.keys(peopleMap());
+        const button = document.createElement("button"); button.type="button";button.className="export-group-choice";button.disabled=!members.length;
+        const name=document.createElement("span"), count=document.createElement("span");
+        setUiText(name,group?.name || "Everyone individually",!group);setUiText(count,`${members.length} ${members.length===1?"person":"people"}`);button.append(name,count);
+        button.addEventListener("click",()=>{const names=new Set(members);for(const input of inputs)input.checked=names.has(input.dataset.person);search.value="";groups.hidden=true;groupButton.setAttribute("aria-expanded","false");update();groupButton.focus();});groups.append(button);
+      }
+      if(!state.groups.length){const message=document.createElement("p");setUiText(message,"No saved groups. Create one using the group controls on the main page.");groups.append(message);}
+    });
+    parent.append(root); update(); return selected;
+  }
+
   function filterExportPeople() {
     const terms = searchText(els.exportPeopleSearch.value.trim()).split(/\s+/).filter(Boolean);
     const inputs = [...els.exportPeopleList.querySelectorAll("input")];
@@ -3379,11 +3524,10 @@ const SYNC_URL = 'https://youfree.ca';
 
   function openHelp() {
     if (state.isParsing || state.pendingImage || state.codeMode) return;
-    els.helpModal.querySelector("#iosShortcutGuide").open = false;
     els.helpModal.hidden = false;
     document.body.style.overflow = "hidden";
     els.helpModal.querySelector(".help-modal").scrollTop = 0;
-    els.closeHelpModal.focus({ preventScroll: true });
+    document.activeElement?.blur();
   }
 
   function closeHelp() {
@@ -3867,6 +4011,11 @@ const SYNC_URL = 'https://youfree.ca';
 
   async function importShareCode({ automatic = false, groupChoice = null } = {}) {
     if (!state.deviceReady || state.isParsing || state.codeMode !== "import") return;
+    if (!automatic && !state.sharedImport && window.UFreeAccounts?.isCloudInput(els.importCodeInput.value)) {
+      try { await window.UFreeAccounts.receive(els.importCodeInput.value); }
+      catch (error) { codeStatus(els.importCodeStatus, error.message, "error"); }
+      return;
+    }
     if (!automatic && !state.sharedImport && /^(?:https?:\/\/|WFL[567])/i.test(els.importCodeInput.value.trim())) { await previewSharedImport(els.importCodeInput.value); return; }
     const selected = state.sharedImport && !state.sharedImport.shared_group ? [...els.sharedImportPeople.querySelectorAll("input:checked")].map(input => input.dataset.person) : null;
     if (selected && !selected.length) return;
@@ -4003,6 +4152,19 @@ const SYNC_URL = 'https://youfree.ca';
     state.storageReadError = false;
     try {
       let record = await readLocalScheduleRecord();
+      if (window.UFreeAccounts?.active()) {
+        const preferences = loadPeoplePreferences();
+        state.nicknames = { ...preferences.nicknames };
+        state.pinnedPeople = new Set(preferences.pinnedPeople);
+        Object.assign(state, loadGroupPreferences());
+        state.personOrders = {}; loadPersonOrders();
+        state.showEveryone = localStorage.getItem(VIEW_PREFERENCE_KEY) === "all";
+        state.theme = loadTheme(); applyTheme(state.theme);
+        state.accentTheme = loadAccentTheme(); applyAccentTheme(state.accentTheme, false);
+        const notifications = loadNotificationSettings();
+        state.notificationsEnabled = notifications.enabled && "Notification" in window && Notification.permission === "granted";
+        state.mutedPeople = new Set(notifications.mutedPeople);
+      }
       if (!record?.data) {
         state.hasData = false;
         state.data = { people: {} };
@@ -4054,6 +4216,7 @@ const SYNC_URL = 'https://youfree.ca';
   }
 
   async function removePerson(name) {
+    if (window.UFreeAccounts?.isLive(name)) { showToast("Live personal schedules are read-only. Manage friends in Account."); return; }
     if (!schedulesWritable() || state.isParsing || state.pendingImage || state.codeMode) return;
     if (!state.hasData || !Object.prototype.hasOwnProperty.call(state.data.people || {}, name)) return;
     const confirmed = window.confirm(translateUi(`Remove ${displayName(name)} from this device?`));
@@ -4145,7 +4308,8 @@ const SYNC_URL = 'https://youfree.ca';
       removeButton.type = "button";
       removeButton.className = "mini-danger-button";
       setUiText(removeButton, "Remove");
-      removeButton.disabled = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
+      removeButton.disabled = Boolean(window.UFreeAccounts?.isLive(name)) || state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
+      if (window.UFreeAccounts?.isLive(name)) setUiAttribute(removeButton,"title","Manage friends in Account.");
       setUiAttribute(removeButton, "aria-label", `Remove ${displayName(name)}`);
       removeButton.addEventListener("click", () => removePerson(name));
 
@@ -4153,7 +4317,7 @@ const SYNC_URL = 'https://youfree.ca';
       editButton.type = "button";
       editButton.className = "secondary-button";
       setUiText(editButton, "Edit");
-      editButton.disabled = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
+      editButton.disabled = Boolean(window.UFreeAccounts?.isLive(name)) || state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
       setUiAttribute(editButton, "aria-label", `Edit ${displayName(name)}`);
       editButton.addEventListener("click", () => openManualSchedule(name, JSON.parse(JSON.stringify(person))));
       row.append(copy, editButton, removeButton);
@@ -4193,6 +4357,7 @@ const SYNC_URL = 'https://youfree.ca';
   }
 
   function updateScheduleModal() {
+    window.UFreeAccounts?.uiIdle();
     updateUndoControls();
     updateGroupToolbar();
     const peopleCount = Object.keys(peopleMap()).length;
@@ -4304,8 +4469,8 @@ const SYNC_URL = 'https://youfree.ca';
       showToast("The saved schedules could not be fully removed. Nothing was removed from this view. Reload and try again when storage is available.");
       return;
     }
-    state.data = { people: {} };
-    state.hasData = false;
+    state.data = window.UFreeAccounts?.active() ? window.UFreeAccounts.read().data : { people: {} };
+    state.hasData = Object.keys(state.data.people).length > 0;
     state.scheduleMeta = null;
     state.selectedPerson = null;
     state.loadError = null;
@@ -4313,10 +4478,10 @@ const SYNC_URL = 'https://youfree.ca';
     rememberScheduleChange(before, "Removed all local schedules");
     state.isParsing = false;
     closeScheduleModal();
-    renderDataSetup();
+    if (state.hasData) refresh(); else renderDataSetup();
     updateScheduleModal();
     updateSettingsModal();
-    showToast("All local schedules removed");
+    showToast(window.UFreeAccounts?.active() && state.hasData ? "Your own schedules were removed. Live schedules remain until you remove the friend." : "All local schedules removed");
   }
 
   function iconAction(label, path, extraClass = "") {
@@ -4503,7 +4668,16 @@ const SYNC_URL = 'https://youfree.ca';
     setUiAttribute(personName, "aria-label", `View details for ${displayName(name)}`);
     personName.setAttribute("aria-pressed", String(selected));
     personName.setAttribute("aria-describedby", "personOrderHelp");
-    setUiText(personName, displayName(name), false);
+    const username = document.createElement("span");
+    setUiText(username, displayName(name), false);
+    personName.append(username);
+    const friendNote = window.UFreeAccounts?.friendNote(name);
+    if (friendNote) {
+      const note = document.createElement("span");
+      note.className = "friend-note";
+      setUiText(note, friendNote, false);
+      personName.append(" ", note);
+    }
     if (pinned) {
       const pinMark = document.createElement("span");
       pinMark.className = "person-pin-mark";
@@ -4525,6 +4699,8 @@ const SYNC_URL = 'https://youfree.ca';
     }
 
     copy.append(personName, detail);
+    if (window.UFreeAccounts?.isLive(name)) { const live = document.createElement("span"); live.className = "live-personal-label"; setUiText(live,"Live personal schedule"); copy.append(live); }
+    if (window.UFreeAccounts?.localOnly(name)) { const local = document.createElement("span"); local.className = "live-personal-label"; setUiText(local,"Device only"); copy.append(local); }
     if (semesterIsOlder(peopleMap()[name].semester)) {
       const label = document.createElement("span");
       label.className = `schedule-semester${semesterIsOlder(peopleMap()[name].semester) ? " semester-older" : ""}`;
@@ -4542,8 +4718,9 @@ const SYNC_URL = 'https://youfree.ca';
 
     const badge = document.createElement("span");
     badge.className = `status-badge ${busy ? "busy" : "free"}`;
-    setUiText(badge, busyClass ? "IN CLASS" : busy ? "Class Soon" : "FREE");
-    badge.style.whiteSpace = "pre-line";
+    setUiText(badge, busyClass ? "IN CLASS" : busy ? "Class Soon" : freeStatusLabel(name, day, minute));
+    badge.style.whiteSpace = "normal";
+    badge.style.maxWidth = "13ch";
 
     button.append(dot, copy, badge);
     attachPersonReorder(button, name, scope);
@@ -4785,7 +4962,7 @@ const SYNC_URL = 'https://youfree.ca';
 
     const badge = document.createElement("span");
     badge.className = `status-badge ${busy ? "busy" : "free"}`;
-    setUiText(badge, current ? "IN CLASS" : busy ? "Class Soon" : "FREE");
+    setUiText(badge, current ? "IN CLASS" : busy ? "Class Soon" : freeStatusLabel(name, day, minute));
     statusRow.append(badge);
 
     if (current) {
@@ -4906,6 +5083,7 @@ const SYNC_URL = 'https://youfree.ca';
 
     if (visible.length === 0 && !state.showGroups) {
       els.peopleList.append(createEmptyList(state.peopleSearchQuery.trim() ? "No matching people" : "Nobody is free", state.peopleSearchQuery.trim() ? "Try another name, clear the search, or choose All." : "Try another time or choose Show everyone."));
+      appendGuestHomeNotice();
       state.selectedPerson = null;
       renderEmptyDetail();
       return;
@@ -4917,6 +5095,7 @@ const SYNC_URL = 'https://youfree.ca';
       displayed = grouped.visible;
       updatePeopleSearchStatus(displayed);
     } else visible.forEach(name => els.peopleList.append(renderPersonCard(name, day, minute)));
+    appendGuestHomeNotice();
     for (const section of els.peopleList.querySelectorAll(".people-group")) {
       if (openMenus.includes(section.dataset.groupId)) section.querySelector(".group-options").open = true;
     }
@@ -5131,7 +5310,10 @@ const SYNC_URL = 'https://youfree.ca';
       applyAccentTheme(button.dataset.colorTheme, true);
     });
     els.scheduleDataButton.addEventListener("click", openScheduleModal);
-    els.homeExportButton.addEventListener("click", event => openQuickCodePanel("export", event));
+    els.homeExportButton.addEventListener("click", event => {
+      if (window.UFreeAccounts?.uiEnabled !== false && window.UFreeAccounts?.active()) window.UFreeAccounts.openSharing();
+      else openQuickCodePanel("export", event);
+    });
     els.homeImportButton?.addEventListener("click", event => openQuickCodePanel("import", event));
     els.bottomImportButton?.addEventListener("click", event => openQuickCodePanel("import", event));
     els.helpButton.addEventListener("click", openHelp);
@@ -5388,7 +5570,7 @@ const SYNC_URL = 'https://youfree.ca';
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=135", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=143", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
@@ -5446,6 +5628,39 @@ const SYNC_URL = 'https://youfree.ca';
       if (state.sharedLinkStartup && !location.hash.startsWith("#import=")) endImportProgress();
       state.sharedLinkStartup = false;
       await openSharedLink();
+      window.UFreeAccounts?.ready({
+        snapshot: () => ({ data: JSON.parse(JSON.stringify(state.data || { people: {} })), meta: state.scheduleMeta }),
+        refresh: () => refresh({preserveScroll: true}),
+        toast: showToast,
+        writeDevice: writeDeviceScheduleRecord,
+        localSnapshot: readLegacyLocalScheduleRecord,
+        prepareDialog: () => {
+          const target = usesDrawerNavigation() ? mobileMenuButton : document.activeElement;
+          closeMobileNavigation(false);
+          return target;
+        },
+        isBusy: () => state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode),
+        canNotify: () => ![...document.querySelectorAll(".modal-backdrop")].some(modal=>!modal.hidden),
+        openImport: () => openQuickCodePanel("import"),
+        openExport: () => openQuickCodePanel("export"),
+        closeSettings: closeSettingsModal,
+        exportPicker: cloudExportPicker,
+        reload: async () => {
+          if (state.isParsing || state.pendingImage || state.codeMode) return;
+          await loadSchedulesFromDevice();
+          refresh({ preserveScroll: true });
+        },
+        importPeople: async people => {
+          if (!schedulesWritable() || state.isParsing || state.pendingImage) throw new Error("Finish the current import or export first.");
+          const incoming = { people: JSON.parse(JSON.stringify(people)) }; validateData(incoming); applyAutomaticSemester(incoming);
+          const merged = await window.WhosFreeShareCode.merge(state.hasData ? state.data : null, incoming, () => "both");
+          const before = captureScheduleChange(); state.data = merged.data;
+          const warning = await persistCurrentDatabase("Imported cloud snapshot");
+          if (warning && warning !== "Cloud limit reached: extra schedules are saved on this device only, not in your account's cloud storage.") throw new Error(warning);
+          rememberScheduleChange(before, "Imported cloud snapshot");
+          showToast(warning || "Imported cloud snapshot");
+        },
+      });
       maybeShowSingleScheduleReminder();
     });
 
